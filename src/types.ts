@@ -1,0 +1,74 @@
+export type ScreenId = "input" | "scene" | "storyboard" | "video" | "final";
+
+export type AnimationStyle =
+  | "Artistic 3D animation"
+  | "Minimalist 3D motion graphics"
+  | "2D animation"
+  | "Clay"
+  | "Watercolor"
+  | "Live-action style";
+
+export interface ExpressionItem {
+  id: string;
+  expression: string;
+  koreanMeaning: string;
+  movie: string;
+}
+
+export interface SceneSettings {
+  title: string;
+  place: string;
+  squareCharacter: string;
+  circlesCharacter: string;
+  situation: string;
+  theme: string;
+  style: AnimationStyle;
+}
+
+export type SpeakerRole = "Square" | "Circle";
+
+export interface DialogueLine {
+  id: string;
+  speaker: SpeakerRole;
+  text: string;
+}
+
+export interface Beat {
+  id: string;
+  number: 1 | 2 | 3 | 4;
+  title: string;
+  startSec: number;
+  endSec: number;
+  durationSec: number;
+  sceneDescription: string;
+  cameraDirection: string;
+  lightingDirection: string;
+  musicDirection: string;
+  lines: DialogueLine[];
+  koreanMeaning: string;
+  learningExpressions: string[];
+}
+
+export interface TimedLine {
+  lineId: string;
+  beatNumber: 1 | 2 | 3 | 4;
+  speaker: SpeakerRole;
+  text: string;
+  koreanTranslation: string;
+  startSec: number;
+  endSec: number;
+  audioBuffer: AudioBuffer | null;
+  sourceMode: "gemini-tts" | "silent-timed";
+}
+
+export interface GeneratedVideoPackage {
+  generatedAt: number;
+  style: AnimationStyle;
+  mode: "3d-animation" | "3d-slideshow";
+  timedLines: TimedLine[];
+  musicBuffer: AudioBuffer;
+  musicSeed: number;
+  musicSourceLabel: string;
+  totalDurationSec: 30;
+  ttsErrorNotice?: string;
+}
