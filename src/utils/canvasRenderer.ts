@@ -1,5 +1,16 @@
-import { FILM_CREDIT_TEXT, PALETTE, splitSubtitleSegments } from "../data/defaults";
-import type { AnimationStyle, SpeakerRole, TimedLine } from "../types";
+import {
+  DEFAULT_TIMELINE_MARKERS,
+  FILM_CREDIT_TEXT,
+  PALETTE,
+  splitSubtitleSegments,
+} from "../data/defaults";
+import type {
+  AnimationStyle,
+  MasterTimelineMarkers,
+  SpeakerRole,
+  TimedLine,
+  TimedSubtitleSegment,
+} from "../types";
 import {
   buildBotanicalFlowerStrokes,
   buildFlowerDotNodes,
@@ -15,11 +26,10 @@ export interface RenderOptions {
   style: AnimationStyle;
   mode: "animation" | "slideshow";
   timedLines: TimedLine[];
+  timedSegments?: TimedSubtitleSegment[];
+  timelineMarkers?: MasterTimelineMarkers;
   drawSubtitles: boolean;
 }
-
-const DOT_NODES = buildFlowerDotNodes();
-const FLOWER_STROKES = buildBotanicalFlowerStrokes();
 
 function clamp(v: number, min = 0, max = 1): number {
   return Math.max(min, Math.min(max, v));
@@ -43,8 +53,17 @@ function easeOutBack(t: number): number {
 
 export function getActiveSubtitleAt(
   timeSec: number,
-  timedLines: TimedLine[]
+  timedLines: TimedLine[],
+  timedSegments?: TimedSubtitleSegment[]
 ): { lines: string[]; speaker: SpeakerRole } | null {
+  if (timedSegments && timedSegments.length > 0) {
+    for (const seg of timedSegments) {
+      if (timeSec >= seg.startSec && timeSec <= seg.endSec) {
+        return { lines: seg.displayLines, speaker: seg.speaker };
+      }
+    }
+    return null;
+  }
   for (const line of timedLines) {
     if (timeSec >= line.startSec && timeSec <= line.endSec) {
       const segs = splitSubtitleSegments(line.text, line.startSec, line.endSec);
@@ -52,10 +71,6 @@ export function getActiveSubtitleAt(
         if (timeSec >= seg.startSec && timeSec <= seg.endSec) {
           return { lines: seg.lines, speaker: line.speaker };
         }
-      }
-      const fallback = segs[segs.length - 1];
-      if (fallback) {
-        return { lines: fallback.lines, speaker: line.speaker };
       }
     }
   }
@@ -105,8 +120,14 @@ function drawPaperBackground(
   }
 }
 
-function drawGraphiteFlower2D(ctx: CanvasRenderingContext2D, timeSec: number) {
-  for (const node of DOT_NODES) {
+function drawGraphiteFlower2D(
+  ctx: CanvasRenderingContext2D,
+  timeSec: number,
+  markers: MasterTimelineMarkers,
+  dotNodes: ReturnType<typeof buildFlowerDotNodes>,
+  flowerStrokes: ReturnType<typeof buildBotanicalFlowerStrokes>
+) {
+  for (const node of dotNodes) {
     if (timeSec < node.timeSec) continue;
     const [px, py] = worldTo2D(node.pos[0], node.pos[1]);
     const r = lerp(3, node.radius * 0.72, easeOutBack((timeSec - node.timeSec) / 0.15));
@@ -116,8 +137,14 @@ function drawGraphiteFlower2D(ctx: CanvasRenderingContext2D, timeSec: number) {
     ctx.fill();
   }
 
-  if (timeSec >= 8.2 && timeSec < 24.75) {
-    const fade = timeSec > 23.75 ? 1 - clamp((timeSec - 23.75) / 0.95) : 1;
+  const strayStart = markers.beat2StartSec + 0.8;
+  const wipeStart = markers.beat4StartSec + 0.35;
+  const wipeEnd = Math.max(wipeStart + 0.45, markers.apologyStartSec - 0.08);
+  if (timeSec >= strayStart && timeSec < wipeEnd) {
+    const fade =
+      timeSec > wipeStart
+        ? 1 - clamp((timeSec - wipeStart) / Math.max(0.25, wipeEnd - wipeStart))
+        : 1;
     const [sx, sy] = worldTo2D(1.85, 1.25);
     ctx.save();
     ctx.globalAlpha = fade;
@@ -133,7 +160,7 @@ function drawGraphiteFlower2D(ctx: CanvasRenderingContext2D, timeSec: number) {
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
 
-  for (const stroke of FLOWER_STROKES) {
+  for (const stroke of flowerStrokes) {
     if (timeSec < stroke.startSec) continue;
     const prog = clamp(
       (timeSec - stroke.startSec) / Math.max(0.01, stroke.endSec - stroke.startSec)
@@ -281,7 +308,10 @@ export function renderFrame(
   ctx: CanvasRenderingContext2D,
   options: RenderOptions
 ): void {
-  const { timeSec, style, mode, timedLines, drawSubtitles } = options;
+  const { timeSec, style, mode, timedLines, timedSegments, drawSubtitles } = options;
+  const markers = options.timelineMarkers ?? DEFAULT_TIMELINE_MARKERS;
+  const dotNodes = buildFlowerDotNodes(markers);
+  const flowerStrokes = buildBotanicalFlowerStrokes(markers);
   const t = clamp(timeSec, 0, 30);
 
   ctx.save();
@@ -293,64 +323,108 @@ export function renderFrame(
   }
 
   drawPaperBackground(ctx, style, t);
-  drawGraphiteFlower2D(ctx, t);
+  drawGraphiteFlower2D(ctx, t, markers, dotNodes, flowerStrokes);
 
-  if (t < 7) {
+  if (t < markers.beat2StartSec) {
+    const enterEnd = Math.max(0.45, markers.dot1TapSec - 0.22);
+    const tapEnd = markers.dot1TapSec + 0.25;
     const [dxBase, dyBase] = worldTo2D(0.05, 1.85);
     let px = dxBase;
     let py = dyBase;
-    if (t < 1.1) {
-      px = lerp(340, dxBase, easeInOut(t / 1.1));
-      py = lerp(dyBase - 50, dyBase - 12, easeInOut(t / 1.1));
-    } else if (t < 1.85) {
+    if (t < enterEnd) {
+      px = lerp(340, dxBase, easeInOut(t / enterEnd));
+      py = lerp(dyBase - 50, dyBase - 12, easeInOut(t / enterEnd));
+    } else if (t < tapEnd) {
       px = dxBase;
       py = dyBase;
     } else {
-      px = lerp(dxBase, dxBase - 120, easeInOut((t - 1.85) / 1.6));
+      px = lerp(dxBase, dxBase - 120, easeInOut((t - tapEnd) / 1.1));
       py = dyBase - 10;
     }
     drawPencil2D(ctx, px, py, -0.22, "curious", t);
 
-    const ex = lerp(1180, 815, easeInOut((t - 2.1) / 2.2));
+    const ex = lerp(
+      1180,
+      815,
+      easeInOut(
+        (t - markers.eraserArriveStartSec) /
+          Math.max(0.35, markers.eraserNoticeDotSec - markers.eraserArriveStartSec)
+      )
+    );
     const [, ey] = worldTo2D(1.28, 1.75);
     drawEraser2D(ctx, ex, ey - 32, 0.05, "strict", t);
-  } else if (t < 15) {
-    const tap = sampleBeat2PencilTap(DOT_NODES, t);
+  } else if (t < markers.beat3StartSec) {
+    const tap = sampleBeat2PencilTap(dotNodes, t, markers.beat2StartSec);
     const [px, py] = worldTo2D(tap.x, tap.z);
-    const lag = sampleBeat2PencilTap(DOT_NODES, Math.max(7.1, t - 1.15));
+    const lag = sampleBeat2PencilTap(
+      dotNodes,
+      Math.max(markers.beat2StartSec + 0.05, t - 0.85),
+      markers.beat2StartSec
+    );
     const [ex, ey] = worldTo2D(lag.x + 0.92, lag.z + 0.62);
     drawPencil2D(ctx, px, py - tap.y * 90, -0.2, "nervous", t);
     drawEraser2D(ctx, ex, ey - 32, -0.1, "strict", t);
-  } else if (t < 23) {
-    const bt = t - 15;
-    const pt = sampleDotPositionAlongStrokes(FLOWER_STROKES, t);
+  } else if (t < markers.beat4StartSec) {
+    const b3 = markers.beat3StartSec;
+    const revealEnd = markers.flowerRevealPeakSec + 0.22;
+    const pt = sampleDotPositionAlongStrokes(flowerStrokes, t);
+    const exitP = easeInOut((t - revealEnd) / 1.1);
     const [px, py] = pt
       ? worldTo2D(pt[0], pt[1])
-      : worldTo2D(lerp(0, -1.68, easeInOut((bt - 4.6) / 1.5)), lerp(-0.94, 0.96, easeInOut((bt - 4.6) / 1.5)));
-    const [ex, ey] = worldTo2D(lerp(1.35, 2.02, easeInOut(bt / 2.2)), 0.35);
-    drawPencil2D(ctx, px, py, -0.22, bt > 4.6 ? "relaxed" : "curious", t);
-    drawEraser2D(ctx, ex, ey - 32, 0.04, "amazed", t);
+      : worldTo2D(lerp(0, -1.68, exitP), lerp(-0.94, 0.96, exitP));
+    const watchP = easeInOut((t - b3) / Math.max(0.8, markers.eraserAmazedSec - b3));
+    const [ex, ey] = worldTo2D(lerp(1.35, 2.02, watchP), 0.35);
+    drawPencil2D(ctx, px, py, -0.22, t > revealEnd ? "relaxed" : "curious", t);
+    drawEraser2D(
+      ctx,
+      ex,
+      ey - 32,
+      0.04,
+      t >= markers.eraserAmazedSec - 0.1 ? "amazed" : "strict",
+      t
+    );
   } else {
-    const bt = t - 23;
-    const strokePos = sampleDotPositionAlongStrokes(FLOWER_STROKES, t);
+    const b4 = markers.beat4StartSec;
+    const wipeStart = b4 + 0.35;
+    const wipeEnd = Math.max(wipeStart + 0.45, markers.apologyStartSec - 0.08);
+    const strokePos = sampleDotPositionAlongStrokes(flowerStrokes, t);
+    const detailStroke = flowerStrokes[flowerStrokes.length - 1];
+    const detailStart = detailStroke?.startSec ?? markers.apologyEndSec + 0.08;
+    const detailEnd = detailStroke?.endSec ?? detailStart + 1.25;
     const pWorld: [number, number] = strokePos
       ? strokePos
-      : bt < 2.15
-      ? [lerp(-1.68, 0.08, easeInOut(bt / 2.15)), lerp(0.96, 1.38, easeInOut(bt / 2.15))]
-      : [lerp(0.58, -1.58, easeInOut((bt - 3.6) / 1.5)), lerp(0.86, 1.05, easeInOut((bt - 3.6) / 1.5))];
+      : t < detailStart
+      ? [
+          lerp(-1.68, 0.08, easeInOut((t - b4) / Math.max(0.4, detailStart - b4))),
+          lerp(0.96, 1.38, easeInOut((t - b4) / Math.max(0.4, detailStart - b4))),
+        ]
+      : [
+          lerp(0.58, -1.58, easeInOut((t - detailEnd) / 1.15)),
+          lerp(0.86, 1.05, easeInOut((t - detailEnd) / 1.15)),
+        ];
     const [px, py] = worldTo2D(pWorld[0], pWorld[1]);
 
-    const exWorld = bt < 1.9 ? 1.85 + Math.sin(bt * 12) * 0.16 : lerp(1.85, 1.65, easeInOut((bt - 1.9) / 1.8));
+    const exWorld =
+      t < wipeEnd
+        ? 1.85 + Math.sin((t - wipeStart) * 14) * 0.16
+        : lerp(1.85, 1.65, easeInOut((t - wipeEnd) / 0.9));
     const [ex, ey] = worldTo2D(exWorld, 1.15);
     drawPencil2D(ctx, px, py, -0.22, "relaxed", t);
-    drawEraser2D(ctx, ex, ey - 32, bt > 2.0 ? -0.1 : 0, "relaxed", t);
+    drawEraser2D(
+      ctx,
+      ex,
+      ey - 32,
+      t >= markers.apologyStartSec && t <= markers.apologyEndSec ? -0.11 : 0,
+      "relaxed",
+      t
+    );
   }
 
   ctx.restore();
 
-  if (t >= 26.8) {
+  if (t >= markers.creditStartSec) {
     ctx.save();
-    ctx.globalAlpha = clamp((t - 26.8) / 1.1);
+    ctx.globalAlpha = clamp((t - markers.creditStartSec) / 1.1);
     ctx.font = "600 22px 'Outfit', 'Noto Sans KR', sans-serif";
     ctx.textAlign = "center";
     ctx.fillStyle = PALETTE.darkGraphite;
@@ -359,7 +433,7 @@ export function renderFrame(
   }
 
   if (drawSubtitles) {
-    const activeSub = getActiveSubtitleAt(t, timedLines);
+    const activeSub = getActiveSubtitleAt(t, timedLines, timedSegments);
     if (activeSub && activeSub.lines.length > 0) {
       ctx.save();
       ctx.font = "700 32px 'Plus Jakarta Sans', 'Noto Sans KR', sans-serif";

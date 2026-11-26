@@ -52,6 +52,48 @@ export interface Beat {
   learningExpressions: string[];
 }
 
+export interface WordTimestamp {
+  word: string;
+  startSec: number;
+  endSec: number;
+}
+
+export interface TimedSubtitleSegment {
+  id: string;
+  lineId: string;
+  beatNumber: 1 | 2 | 3 | 4;
+  speaker: SpeakerRole;
+  voiceId: VoiceId;
+  text: string;
+  displayLines: string[];
+  koreanTranslation: string;
+  startSec: number;
+  endSec: number;
+  words: WordTimestamp[];
+}
+
+export interface MasterTimelineMarkers {
+  totalDurationSec: 30;
+  dot1TapSec: number;
+  eraserArriveStartSec: number;
+  eraserNoticeDotSec: number;
+  beat1EndSec: number;
+  beat2StartSec: number;
+  beat2SpeechStartSec: number;
+  beat2SpeechEndSec: number;
+  beat2DotTimes: number[];
+  beat3StartSec: number;
+  eraserAmazedSec: number;
+  flowerRevealPeakSec: number;
+  beat3SpeechEndSec: number;
+  beat4StartSec: number;
+  apologyStartSec: number;
+  apologyEndSec: number;
+  pencilRespondSec: number;
+  pencilRespondEndSec: number;
+  creditStartSec: number;
+}
+
 export interface TimedLine {
   lineId: string;
   beatNumber: 1 | 2 | 3 | 4;
@@ -61,6 +103,11 @@ export interface TimedLine {
   koreanTranslation: string;
   startSec: number;
   endSec: number;
+  trimStartSec: number;
+  trimEndSec: number;
+  rawDurationSec: number;
+  playbackRate: number;
+  segments: TimedSubtitleSegment[];
   audioBuffer: AudioBuffer | null;
   sourceMode: "gemini-tts" | "silent-timed";
 }
@@ -70,6 +117,8 @@ export interface GeneratedVideoPackage {
   style: AnimationStyle;
   mode: "3d-animation" | "3d-slideshow";
   timedLines: TimedLine[];
+  timedSegments: TimedSubtitleSegment[];
+  timelineMarkers: MasterTimelineMarkers;
   musicBuffer: AudioBuffer;
   track1Buffer: AudioBuffer;
   track2Buffer: AudioBuffer;

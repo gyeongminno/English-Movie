@@ -1,4 +1,5 @@
-import type { TimedLine } from "../types";
+import { DEFAULT_TIMELINE_MARKERS } from "../data/defaults";
+import type { MasterTimelineMarkers, TimedLine } from "../types";
 
 /**
  * Creates a soft stereo room impulse response for delicate piano, pizzicato, xylophone, and bells.
@@ -271,21 +272,23 @@ const C5 = 523.25;
 const C6 = 1046.5;
 
 /**
- * Background Music 1 — Curiosity (0–15 seconds)
+ * Background Music 1 — Curiosity (Beat 1 + Beat 2 -> until Beat 3 Turn)
  * - Simple four-note melody: C4, E4, D4, G4
  * - Soft piano & subtle pizzicato ONLY
- * - Begins ~90 BPM (Beat 1), repeats with rhythmic variations,
- *   synchronizes notes with pencil dot taps, accelerates to ~120 BPM during chase (Beat 2).
+ * - Synchronized directly with Pencil dot taps and Beat 2 chase tempo.
  */
 function scheduleTrack1(
   ctx: BaseAudioContext,
   dest: AudioNode,
-  seed: number
+  seed: number,
+  markers: MasterTimelineMarkers
 ) {
   const altRhythm = seed % 2 === 0;
+  const tap1 = markers.dot1TapSec;
+  const b2Start = markers.beat2StartSec;
+  const b3Start = markers.beat3StartSec;
 
-  // --- Beat 1 (0–7s): ~90 BPM (beat = 0.667s), short, light, playful notes ---
-  // Phrase 1: C4 -> E4 -> G4 (syncs with 1st pencil dot tap at 1.45s!) -> D4
+  // --- Beat 1: ~90 BPM playful notes anchored around dot1TapSec & Eraser arrival ---
   const beat1Cues: Array<{
     t: number;
     hz: number;
@@ -293,25 +296,32 @@ function scheduleTrack1(
     dur: number;
     gain: number;
   }> = [
-    { t: 0.35, hz: C4, kind: "piano", dur: 0.55, gain: 0.16 },
-    { t: 1.02, hz: E4, kind: "piano", dur: 0.42, gain: 0.15 },
-    // Synced directly with Pencil's first graphite dot placement at 1.45s
-    { t: 1.45, hz: G4, kind: "piano", dur: 0.48, gain: 0.19 },
-    { t: 1.45, hz: G4, kind: "pizz", dur: 0.24, gain: 0.10 },
-    { t: 2.12, hz: D4, kind: "piano", dur: 0.52, gain: 0.15 },
-    { t: 2.48, hz: E4, kind: "pizz", dur: 0.22, gain: 0.095 },
-
-    // Phrase 2 (small rhythmic variation as Eraser slides in ~2.1–4.3s)
-    { t: 3.05, hz: C4, kind: "pizz", dur: 0.24, gain: 0.11 },
-    { t: 3.38, hz: E4, kind: "pizz", dur: 0.24, gain: 0.11 },
-    { t: altRhythm ? 3.85 : 3.72, hz: D4, kind: "piano", dur: 0.48, gain: 0.15 },
-    { t: 4.38, hz: G4, kind: "piano", dur: 0.55, gain: 0.165 },
-    { t: 5.05, hz: E4, kind: "pizz", dur: 0.24, gain: 0.10 },
-    { t: 5.38, hz: D4, kind: "pizz", dur: 0.24, gain: 0.10 },
-    { t: 5.75, hz: C4, kind: "piano", dur: 0.58, gain: 0.155 },
-    { t: 6.42, hz: D4, kind: "pizz", dur: 0.24, gain: 0.105 },
-    { t: 6.75, hz: G4, kind: "pizz", dur: 0.24, gain: 0.105 },
+    { t: Math.max(0.15, tap1 - 0.65), hz: C4, kind: "piano", dur: 0.55, gain: 0.16 },
+    { t: Math.max(0.45, tap1 - 0.32), hz: E4, kind: "piano", dur: 0.42, gain: 0.15 },
+    { t: tap1, hz: G4, kind: "piano", dur: 0.48, gain: 0.19 },
+    { t: tap1, hz: G4, kind: "pizz", dur: 0.24, gain: 0.10 },
+    { t: tap1 + 0.55, hz: D4, kind: "piano", dur: 0.52, gain: 0.15 },
+    { t: tap1 + 0.9, hz: E4, kind: "pizz", dur: 0.22, gain: 0.095 },
   ];
+
+  // Fill Beat 1 phrases smoothly up to b2Start using C4, E4, D4, G4
+  const b1Motif = [C4, E4, D4, G4, E4, D4, C4, G4];
+  let cursor = tap1 + 1.5;
+  let stepIdx = 0;
+  while (cursor < b2Start - 0.25) {
+    const hz = b1Motif[stepIdx % b1Motif.length];
+    const kind = stepIdx % 3 === 1 ? "piano" : "pizz";
+    const step = altRhythm && stepIdx % 2 === 1 ? 0.58 : 0.66;
+    beat1Cues.push({
+      t: cursor,
+      hz,
+      kind,
+      dur: kind === "piano" ? 0.52 : 0.24,
+      gain: kind === "piano" ? 0.155 : 0.105,
+    });
+    cursor += step;
+    stepIdx++;
+  }
 
   beat1Cues.forEach((n) => {
     if (n.kind === "piano") {
@@ -321,173 +331,182 @@ function scheduleTrack1(
     }
   });
 
-  // --- Beat 2 (7–15s): Gradually accelerate ~90 BPM -> ~120 BPM during the chase ---
-  // All 11 Beat-2 Pencil dot tap timestamps get a crisp short piano note from [C4, E4, D4, G4]
-  const beat2TapNotes: Array<[number, number]> = [
-    [7.60, C4],
-    [8.02, E4],
-    [8.82, D4],
-    [9.58, G4],
-    [10.30, C4],
-    [10.98, E4],
-    [11.62, D4],
-    [12.26, G4],
-    [12.92, C4],
-    [13.62, E4],
-    [14.44, G4],
-  ];
-
-  beat2TapNotes.forEach(([t, hz]) => {
+  // --- Beat 2: All 11 Pencil dot tap timestamps get a crisp note from [C4, E4, D4, G4] ---
+  const noteCycle = [C4, E4, D4, G4];
+  const tapTimes = markers.beat2DotTimes;
+  tapTimes.forEach((t, idx) => {
+    const hz = noteCycle[idx % noteCycle.length];
     triggerFeltPiano(ctx, dest, hz, t, 0.34, 0.185);
     triggerPizzicato(ctx, dest, hz, t, 0.085);
   });
 
-  // Subtle pizzicato chase steps accelerating from ~90 BPM (0.67s) to ~120 BPM (0.25s eighth pulses)
-  const chasePizz: Array<[number, number, number]> = [
-    [7.15, G4, 0.105],
-    [7.82, D4, 0.095],
-    [8.42, C4, 0.105],
-    [9.20, E4, 0.105],
-    [9.94, D4, 0.11],
-    [10.64, G4, 0.11],
-    [11.30, C4, 0.115],
-    [11.94, E4, 0.115],
-    [12.58, D4, 0.115],
-    [13.26, G4, 0.12],
-    [13.88, D4, 0.115],
-    [14.16, C4, 0.11],
-    [14.70, D4, 0.10],
-    [14.96, E4, 0.085],
-  ];
-
-  chasePizz.forEach(([t, hz, gain], idx) => {
-    const pick = altRhythm && idx % 3 === 1 ? (hz === D4 ? E4 : D4) : hz;
-    triggerPizzicato(ctx, dest, pick, t, gain);
-  });
+  // Subtle pizzicato chase pulses accelerating smoothly from ~90 BPM to ~120 BPM across [b2Start, b3Start]
+  const chaseSpan = Math.max(1.5, b3Start - b2Start);
+  let chaseT = b2Start + 0.08;
+  let cIdx = 0;
+  while (chaseT < b3Start - 0.08) {
+    const progress = Math.min(1, (chaseT - b2Start) / chaseSpan);
+    const interval = 0.64 - progress * 0.28; // 94 BPM -> 166 BPM eighth feel (~120 BPM)
+    const hz = noteCycle[(cIdx + (altRhythm ? 1 : 0)) % noteCycle.length];
+    triggerPizzicato(ctx, dest, hz, chaseT, 0.095 + progress * 0.025);
+    chaseT += Math.max(0.24, interval);
+    cIdx++;
+  }
 }
 
 /**
- * Background Music 2 — Blooming (15–30 seconds)
+ * Background Music 2 — Blooming (Beat 3 Turn -> End at 30s)
  * - Simple ascending melody: C4, E4, G4, C5
  * - Soft piano, gentle xylophone & subtle bell sounds ONLY
- * - Relaxed ~75 BPM (beat = 0.80s) with longer resonant notes
- * - Ascending notes track pencil connecting dots (15.05–19.6s)
- * - Gentle musical accent when Eraser's eyes widen in surprise (~18.1s)
- * - Delicate high note when completed flower is revealed (~19.35s)
- * - Slows down gently during apology & reconciliation (23–30s), ending with sustained final note.
+ * - Synced directly to Beat 3 dot-connecting, Eraser eye-widen, flower reveal & Beat 4 apology.
  */
 function scheduleTrack2(
   ctx: BaseAudioContext,
   dest: AudioNode,
   seed: number,
+  markers: MasterTimelineMarkers,
   timeOffset = 0
 ) {
   const shift = (t: number) => t + timeOffset;
   const alt = seed % 2 === 0;
+  const b3 = markers.beat3StartSec;
+  const amazed = markers.eraserAmazedSec;
+  const reveal = markers.flowerRevealPeakSec;
+  const b4 = markers.beat4StartSec;
+  const apology = markers.apologyStartSec;
+  const reply = markers.pencilRespondSec;
 
-  // --- Beat 3 (15–23s): Ascending C4 -> E4 -> G4 -> C5 as dots connect into the flower ---
-  // 15.05s: Stem starts
-  triggerFeltPiano(ctx, dest, C4, shift(15.05), 2.2, 0.175);
-  triggerGentleXylophone(ctx, dest, C4, shift(15.05), 0.9, 0.095);
+  const connectSpan = Math.max(1.2, amazed - b3);
+  const step0 = b3 + 0.05;
+  const step1 = b3 + connectSpan * 0.34;
+  const step2 = b3 + connectSpan * 0.68;
 
-  // 15.85s: Left leaf
-  triggerFeltPiano(ctx, dest, E4, shift(15.85), 2.0, 0.17);
-  triggerGentleXylophone(ctx, dest, E4, shift(15.85), 0.9, 0.095);
+  // --- Beat 3: Ascending C4 -> E4 -> G4 -> C5 as dots connect into the flower ---
+  triggerFeltPiano(ctx, dest, C4, shift(step0), 2.1, 0.175);
+  triggerGentleXylophone(ctx, dest, C4, shift(step0), 0.9, 0.095);
 
-  // 16.45s: Right leaf
-  triggerFeltPiano(ctx, dest, G4, shift(16.55), 2.0, 0.175);
-  triggerGentleXylophone(ctx, dest, G4, shift(16.55), 0.95, 0.10);
+  triggerFeltPiano(ctx, dest, E4, shift(step1), 1.9, 0.17);
+  triggerGentleXylophone(ctx, dest, E4, shift(step1), 0.9, 0.095);
 
-  // 17.30s: Lower petals connecting
-  triggerFeltPiano(ctx, dest, C5, shift(17.30), 2.1, 0.18);
-  triggerGentleXylophone(ctx, dest, C5, shift(17.30), 1.0, 0.10);
+  triggerFeltPiano(ctx, dest, G4, shift(step2), 1.9, 0.175);
+  triggerGentleXylophone(ctx, dest, G4, shift(step2), 0.95, 0.1);
 
-  // 18.10s: Gentle musical accent synchronized with Eraser's eyes widening in surprise
-  triggerFeltPiano(ctx, dest, G4, shift(18.10), 1.8, 0.14);
-  triggerFeltPiano(ctx, dest, C5, shift(18.10), 1.9, 0.17);
-  triggerDelicateBell(ctx, dest, C5, shift(18.10), 1.6, 0.075);
+  // Gentle musical accent synchronized with Eraser's eyes widening in surprise
+  triggerFeltPiano(ctx, dest, G4, shift(amazed), 1.8, 0.14);
+  triggerFeltPiano(ctx, dest, C5, shift(amazed), 1.9, 0.17);
+  triggerDelicateBell(ctx, dest, C5, shift(amazed), 1.6, 0.075);
 
-  // 19.35s: Completed flower revealed -> delicate high note with soft piano resonance
-  triggerDelicateBell(ctx, dest, C6, shift(19.35), 2.5, 0.095);
-  triggerGentleXylophone(ctx, dest, C5, shift(19.35), 1.4, 0.11);
-  triggerFeltPiano(ctx, dest, C4, shift(19.35), 2.8, 0.125);
-  triggerFeltPiano(ctx, dest, E4, shift(19.35), 2.8, 0.11);
-  triggerFeltPiano(ctx, dest, G4, shift(19.35), 2.8, 0.115);
+  // Completed flower revealed -> delicate high note with soft piano resonance
+  triggerDelicateBell(ctx, dest, C6, shift(reveal), 2.5, 0.095);
+  triggerGentleXylophone(ctx, dest, C5, shift(reveal), 1.4, 0.11);
+  triggerFeltPiano(ctx, dest, C4, shift(reveal), 2.6, 0.125);
+  triggerFeltPiano(ctx, dest, E4, shift(reveal), 2.6, 0.11);
+  triggerFeltPiano(ctx, dest, G4, shift(reveal), 2.6, 0.115);
 
-  // 20.6–22.8s: Warm relaxed 75 BPM phrase (0.80s spacing)
-  triggerGentleXylophone(ctx, dest, alt ? E4 : G4, shift(20.65), 1.1, 0.095);
-  triggerFeltPiano(ctx, dest, E4, shift(21.45), 1.7, 0.155);
-  triggerFeltPiano(ctx, dest, C4, shift(22.25), 1.8, 0.155);
+  // Warm relaxed ~75 BPM phrases through end of Beat 3
+  let tWarm = reveal + 0.95;
+  const warmCycle = [alt ? E4 : G4, E4, C4];
+  let wIdx = 0;
+  while (tWarm < b4 - 0.15) {
+    const hz = warmCycle[wIdx % warmCycle.length];
+    triggerFeltPiano(ctx, dest, hz, shift(tWarm), 1.65, 0.15);
+    if (wIdx % 2 === 0) {
+      triggerGentleXylophone(ctx, dest, hz, shift(tWarm), 1.0, 0.09);
+    }
+    tWarm += 0.8;
+    wIdx++;
+  }
 
-  // --- Beat 4 (23–30s): Apology & reconciliation with gentle ritardando (75 -> ~50 BPM) ---
-  // 23.10s: Eraser glides to clear stray marks
-  triggerFeltPiano(ctx, dest, C4, shift(23.10), 1.9, 0.155);
-  triggerGentleXylophone(ctx, dest, C4, shift(23.10), 1.0, 0.085);
+  // --- Beat 4: Apology & reconciliation with gentle ritardando (75 -> ~50 BPM) ---
+  triggerFeltPiano(ctx, dest, C4, shift(b4 + 0.08), 1.8, 0.155);
+  triggerGentleXylophone(ctx, dest, C4, shift(b4 + 0.08), 1.0, 0.085);
 
-  // 23.95s: Soft E4 (0.85s interval)
-  triggerFeltPiano(ctx, dest, E4, shift(23.95), 1.9, 0.155);
-  triggerGentleXylophone(ctx, dest, E4, shift(23.95), 1.0, 0.085);
+  if (apology > b4 + 0.7) {
+    triggerFeltPiano(ctx, dest, E4, shift((b4 + apology) * 0.5), 1.8, 0.15);
+  }
 
-  // 24.90s: Soft G4 (0.95s interval) as Pencil adds final detail
-  triggerFeltPiano(ctx, dest, G4, shift(24.90), 2.1, 0.16);
-  triggerDelicateBell(ctx, dest, G4, shift(24.90), 1.6, 0.055);
+  // Soft E4 right as Eraser begins apologizing ("I'm so sorry. Can you forgive me?")
+  triggerFeltPiano(ctx, dest, E4, shift(apology), 2.0, 0.15);
+  triggerDelicateBell(ctx, dest, G4, shift(apology), 1.5, 0.05);
 
-  // 25.95s: Slower E4 (1.05s interval) during Eraser apology tilt ("I'm so sorry. Can you forgive me?")
-  triggerFeltPiano(ctx, dest, E4, shift(25.95), 2.1, 0.15);
+  // Warm G4 right as Pencil responds ("No worries! Let's make something beautiful together.")
+  triggerFeltPiano(ctx, dest, G4, shift(reply), 2.0, 0.155);
+  triggerGentleXylophone(ctx, dest, G4, shift(reply), 1.2, 0.085);
 
-  // 27.05s: Slower G4 (1.10s interval) as Pencil responds ("No worries!")
-  triggerFeltPiano(ctx, dest, G4, shift(27.05), 1.9, 0.15);
-  triggerGentleXylophone(ctx, dest, G4, shift(27.05), 1.2, 0.08);
-
-  // 28.05s: Gentle, sustained final note (C5 + warm C4/E4/G4 open resonance fading smoothly before 30s)
-  triggerFeltPiano(ctx, dest, C4, shift(28.05), 1.9, 0.125);
-  triggerFeltPiano(ctx, dest, E4, shift(28.05), 1.9, 0.105);
-  triggerFeltPiano(ctx, dest, G4, shift(28.05), 1.9, 0.105);
-  triggerFeltPiano(ctx, dest, C5, shift(28.05), 1.9, 0.165);
-  triggerDelicateBell(ctx, dest, C6, shift(28.05), 1.9, 0.06);
+  // Gentle, sustained final note ending cleanly before 30.0s
+  const finalChordT = Math.min(28.25, Math.max(reply + 1.25, markers.pencilRespondEndSec - 0.15));
+  const finalDur = Math.max(1.4, 29.85 - finalChordT);
+  triggerFeltPiano(ctx, dest, C4, shift(finalChordT), finalDur, 0.125);
+  triggerFeltPiano(ctx, dest, E4, shift(finalChordT), finalDur, 0.105);
+  triggerFeltPiano(ctx, dest, G4, shift(finalChordT), finalDur, 0.105);
+  triggerFeltPiano(ctx, dest, C5, shift(finalChordT), finalDur, 0.165);
+  triggerDelicateBell(ctx, dest, C6, shift(finalChordT), finalDur, 0.06);
 }
 
-function scheduleFoley(ctx: BaseAudioContext, foleyBus: AudioNode) {
-  // Beat 1: soft pencil tap placing the first graphite dot + rubber friction as eraser enters
-  triggerPaperFoley(ctx, foleyBus, "pencil-tap", 1.45);
-  triggerPaperFoley(ctx, foleyBus, "eraser-slide", 3.1, 0.32);
+function scheduleFoley(
+  ctx: BaseAudioContext,
+  foleyBus: AudioNode,
+  markers: MasterTimelineMarkers
+) {
+  // Beat 1: soft pencil tap placing 1st dot + rubber friction as eraser slides in
+  triggerPaperFoley(ctx, foleyBus, "pencil-tap", markers.dot1TapSec);
+  triggerPaperFoley(ctx, foleyBus, "eraser-slide", markers.eraserArriveStartSec + 0.18, 0.34);
 
-  // Beat 2: rhythmic graphite tapping sounds synchronized with Beat 2 dots & notes + eraser chase friction
-  const beat2TapTimes = [
-    7.60, 8.02, 8.82, 9.58, 10.30, 10.98, 11.62, 12.26, 12.92, 13.62, 14.44,
-  ];
-  beat2TapTimes.forEach((t) => triggerPaperFoley(ctx, foleyBus, "pencil-tap", t));
-  [7.85, 9.4, 11.1, 12.75, 14.2].forEach((t) =>
-    triggerPaperFoley(ctx, foleyBus, "eraser-slide", t, 0.28)
+  // Beat 2: rhythmic graphite tapping sounds synchronized with all 11 dots + eraser chase friction
+  markers.beat2DotTimes.forEach((t) =>
+    triggerPaperFoley(ctx, foleyBus, "pencil-tap", t)
   );
+  const chaseSpan = Math.max(1.2, markers.beat3StartSec - markers.beat2StartSec);
+  for (let i = 0; i < 4; i++) {
+    const et = markers.beat2StartSec + 0.3 + (i / 4) * (chaseSpan - 0.45);
+    triggerPaperFoley(ctx, foleyBus, "eraser-slide", et, 0.28);
+  }
 
-  // Beat 3: soft graphite scratching as dots are connected + flower reveal accent at 19.35s
-  triggerPaperFoley(ctx, foleyBus, "graphite-scratch", 15.1, 1.15);
-  triggerPaperFoley(ctx, foleyBus, "graphite-scratch", 16.4, 1.15);
-  triggerPaperFoley(ctx, foleyBus, "graphite-scratch", 17.65, 0.95);
-  triggerPaperFoley(ctx, foleyBus, "flower-bloom", 19.35);
+  // Beat 3: soft graphite scratching as dots connect + flower reveal chime
+  const b3 = markers.beat3StartSec;
+  const peak = markers.flowerRevealPeakSec;
+  triggerPaperFoley(ctx, foleyBus, "graphite-scratch", b3 + 0.05, Math.min(1.15, (peak - b3) * 0.45));
+  triggerPaperFoley(ctx, foleyBus, "graphite-scratch", b3 + (peak - b3) * 0.48, Math.min(1.1, (peak - b3) * 0.45));
+  triggerPaperFoley(ctx, foleyBus, "flower-bloom", peak);
 
-  // Beat 4: gentle erasing of unnecessary marks + soft final graphite detail
-  triggerPaperFoley(ctx, foleyBus, "eraser-slide", 23.85, 0.42);
-  triggerPaperFoley(ctx, foleyBus, "graphite-scratch", 25.35, 0.55);
+  // Beat 4: gentle erasing of stray marks + soft final detail
+  triggerPaperFoley(
+    ctx,
+    foleyBus,
+    "eraser-slide",
+    markers.beat4StartSec + 0.2,
+    Math.max(0.28, Math.min(0.55, markers.apologyStartSec - markers.beat4StartSec - 0.25))
+  );
+  triggerPaperFoley(
+    ctx,
+    foleyBus,
+    "graphite-scratch",
+    Math.min(28.5, markers.apologyEndSec + 0.15),
+    0.5
+  );
 }
 
 /**
- * Generates both minimalist background music tracks (Curiosity 0–15s & Blooming 15–30s)
- * plus a unified 30.00-second stereo mix with smooth 15s crossfade and synchronized foley.
+ * Generates both minimalist background music tracks (Curiosity & Blooming)
+ * plus a unified 30.00-second stereo mix locked to MasterTimelineMarkers.
  */
 export async function generateOriginalSoundtrack(
   seed = 1,
-  sampleRate = 48000
+  sampleRate = 48000,
+  markers: MasterTimelineMarkers = DEFAULT_TIMELINE_MARKERS
 ): Promise<{
   combinedBuffer: AudioBuffer;
   track1Buffer: AudioBuffer;
   track2Buffer: AudioBuffer;
 }> {
   const durationSec = 30;
+  const xfadeCenter = markers.beat3StartSec;
+  const xfadeStart = Math.max(4.0, xfadeCenter - 0.55);
+  const xfadeEnd = Math.min(24.0, xfadeCenter + 0.65);
 
-  // 1. Standalone Background Music 1 — Curiosity (0–15s active, smooth fade out 14.4–16.0s)
-  const offlineT1 = new OfflineAudioContext(2, 16 * sampleRate, sampleRate);
+  // 1. Standalone Background Music 1 — Curiosity
+  const t1LenSec = Math.max(10, Math.ceil(xfadeEnd + 0.5));
+  const offlineT1 = new OfflineAudioContext(2, t1LenSec * sampleRate, sampleRate);
   const t1Wet = offlineT1.createGain();
   t1Wet.gain.value = 0.26;
   const t1Conv = offlineT1.createConvolver();
@@ -498,16 +517,18 @@ export async function generateOriginalSoundtrack(
   const t1Bus = offlineT1.createGain();
   t1Bus.gain.setValueAtTime(0.001, 0);
   t1Bus.gain.linearRampToValueAtTime(0.92, 0.3);
-  t1Bus.gain.setValueAtTime(0.92, 14.35);
-  t1Bus.gain.linearRampToValueAtTime(0.0001, 15.95);
+  t1Bus.gain.setValueAtTime(0.92, xfadeStart);
+  t1Bus.gain.linearRampToValueAtTime(0.0001, xfadeEnd);
   t1Bus.connect(offlineT1.destination);
   t1Bus.connect(t1Wet);
 
-  scheduleTrack1(offlineT1, t1Bus, seed);
+  scheduleTrack1(offlineT1, t1Bus, seed, markers);
   const track1Buffer = await offlineT1.startRendering();
 
-  // 2. Standalone Background Music 2 — Blooming (15–30s shifted to 0–15.5s preview)
-  const offlineT2 = new OfflineAudioContext(2, 15.5 * sampleRate, sampleRate);
+  // 2. Standalone Background Music 2 — Blooming (shifted to start at 0 for standalone preview)
+  const t2PreviewStart = xfadeStart;
+  const t2LenSec = Math.max(8, Math.ceil(30 - t2PreviewStart + 0.5));
+  const offlineT2 = new OfflineAudioContext(2, t2LenSec * sampleRate, sampleRate);
   const t2Wet = offlineT2.createGain();
   t2Wet.gain.value = 0.34;
   const t2Conv = offlineT2.createConvolver();
@@ -518,15 +539,15 @@ export async function generateOriginalSoundtrack(
   const t2Bus = offlineT2.createGain();
   t2Bus.gain.setValueAtTime(0.001, 0);
   t2Bus.gain.linearRampToValueAtTime(0.92, 0.55);
-  t2Bus.gain.setValueAtTime(0.92, 13.6);
-  t2Bus.gain.linearRampToValueAtTime(0.0001, 15.42);
+  t2Bus.gain.setValueAtTime(0.92, Math.max(1.0, 28.4 - t2PreviewStart));
+  t2Bus.gain.linearRampToValueAtTime(0.0001, Math.max(1.5, 29.92 - t2PreviewStart));
   t2Bus.connect(offlineT2.destination);
   t2Bus.connect(t2Wet);
 
-  scheduleTrack2(offlineT2, t2Bus, seed, -14.8);
+  scheduleTrack2(offlineT2, t2Bus, seed, markers, -t2PreviewStart);
   const track2Buffer = await offlineT2.startRendering();
 
-  // 3. Combined 30.00-second Score with Smooth 15s Crossfade + Synchronized Paper/Pencil/Eraser Foley
+  // 3. Combined 30.00-second Score with Smooth Crossfade at beat3StartSec + Synchronized Foley
   const offline = new OfflineAudioContext(2, durationSec * sampleRate, sampleRate);
 
   const dryBus = offline.createGain();
@@ -540,20 +561,18 @@ export async function generateOriginalSoundtrack(
   wetBus.connect(convolver);
   convolver.connect(offline.destination);
 
-  // Track 1 (Curiosity) smooth crossfade out across 14.35s -> 15.85s
   const track1Bus = offline.createGain();
   track1Bus.gain.setValueAtTime(0.001, 0);
   track1Bus.gain.linearRampToValueAtTime(0.92, 0.3);
-  track1Bus.gain.setValueAtTime(0.92, 14.35);
-  track1Bus.gain.linearRampToValueAtTime(0.0001, 15.85);
+  track1Bus.gain.setValueAtTime(0.92, xfadeStart);
+  track1Bus.gain.linearRampToValueAtTime(0.0001, xfadeEnd);
   track1Bus.connect(dryBus);
   track1Bus.connect(wetBus);
 
-  // Track 2 (Blooming) smooth crossfade in across 14.35s -> 15.65s & sustained fade at 30s
   const track2Bus = offline.createGain();
   track2Bus.gain.setValueAtTime(0.0001, 0);
-  track2Bus.gain.setValueAtTime(0.0001, 14.35);
-  track2Bus.gain.linearRampToValueAtTime(0.94, 15.55);
+  track2Bus.gain.setValueAtTime(0.0001, xfadeStart);
+  track2Bus.gain.linearRampToValueAtTime(0.94, xfadeEnd);
   track2Bus.gain.setValueAtTime(0.94, 28.4);
   track2Bus.gain.linearRampToValueAtTime(0.0001, 29.95);
   track2Bus.connect(dryBus);
@@ -563,9 +582,9 @@ export async function generateOriginalSoundtrack(
   foleyBus.gain.value = 0.72;
   foleyBus.connect(dryBus);
 
-  scheduleTrack1(offline, track1Bus, seed);
-  scheduleTrack2(offline, track2Bus, seed, 0);
-  scheduleFoley(offline, foleyBus);
+  scheduleTrack1(offline, track1Bus, seed, markers);
+  scheduleTrack2(offline, track2Bus, seed, markers, 0);
+  scheduleFoley(offline, foleyBus, markers);
 
   const combinedBuffer = await offline.startRendering();
   return { combinedBuffer, track1Buffer, track2Buffer };
@@ -573,7 +592,7 @@ export async function generateOriginalSoundtrack(
 
 /**
  * Schedules automatic volume ducking on a GainNode whenever characters speak
- * so the background music always remains clearly audible yet quieter than dialogue.
+ * so background music stays gently audible beneath English voices.
  */
 export function buildDuckingEnvelope(
   gainNode: AudioParam,
@@ -582,12 +601,12 @@ export function buildDuckingEnvelope(
   startTimeInCtx: number,
   offsetSec: number
 ) {
-  const ducked = baseVolume * 0.42; // Keep music gently audible beneath English voices
-  const fade = 0.2;
+  const ducked = baseVolume * 0.42;
+  const fade = 0.16;
 
   gainNode.cancelScheduledValues(startTimeInCtx);
   const currentlySpeaking = timedLines.some(
-    (l) => offsetSec >= l.startSec - 0.1 && offsetSec <= l.endSec + 0.1
+    (l) => offsetSec >= l.startSec - 0.08 && offsetSec <= l.endSec + 0.08
   );
   gainNode.setValueAtTime(
     currentlySpeaking ? ducked : baseVolume,
@@ -604,7 +623,7 @@ export function buildDuckingEnvelope(
     gainNode.setValueAtTime(baseVolume, duckAt);
     gainNode.linearRampToValueAtTime(ducked, startTimeInCtx + relStart);
     gainNode.setValueAtTime(ducked, restoreAt);
-    gainNode.linearRampToValueAtTime(baseVolume, restoreAt + fade * 1.4);
+    gainNode.linearRampToValueAtTime(baseVolume, restoreAt + fade * 1.3);
   }
 }
 

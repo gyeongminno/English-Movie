@@ -46,7 +46,33 @@ async function withRetry<T>(fn: () => Promise<T>, maxAttempts = 4): Promise<T> {
   throw lastErr;
 }
 
-const ttsCache = new Map<string, string>();
+interface AlignedWord {
+  word: string;
+  startSec: number;
+  endSec: number;
+}
+
+interface AlignedSegment {
+  text: string;
+  startSec: number;
+  endSec: number;
+  words: AlignedWord[];
+}
+
+interface AudioAlignmentResult {
+  rawDurationSec: number;
+  speechOnsetSec: number;
+  speechOffsetSec: number;
+  segments: AlignedSegment[];
+  method: "gemini-audio-forced-alignment+pcm-vad" | "pcm-vad-syllable-dp";
+}
+
+interface CachedTtsEntry {
+  audioBase64: string;
+  alignment: AudioAlignmentResult;
+}
+
+const ttsCache = new Map<string, CachedTtsEntry>();
 
 interface RegenerateBeatBody {
   beatNumber: number;
@@ -77,6 +103,7 @@ interface TtsBody {
   speaker: "Pencil" | "Eraser";
   voiceId?: "PENCIL_VOICE" | "ERASER_VOICE";
   beatNumber?: number;
+  segments?: string[];
 }
 
 const FIXED_TTS_MODEL = "gemini-3.8-flash-tts" as const;
@@ -138,6 +165,454 @@ function enforceBeatSpeakers(
         .trim(),
     },
   ];
+}
+
+interface PcmPause {
+  startSec: number;
+  endSec: number;
+  midSec: number;
+  durSec: number;
+}
+
+interface PcmAnalysis {
+  durationSec: number;
+  speechOnsetSec: number;
+  speechOffsetSec: number;
+  frameDurSec: number;
+  rmsFrames: number[];
+  pauses: PcmPause[];
+}
+
+function analyzeWavPcm(base64Wav: string): PcmAnalysis {
+  const buf = Buffer.from(base64Wav, "base64");
+  let sampleRate = 24000;
+  let numChannels = 1;
+  let bitsPerSample = 16;
+  let dataOffset = 44;
+  let dataSize = Math.max(0, buf.length - 44);
+
+  if (buf.length >= 44 && buf.toString("ascii", 0, 4) === "RIFF") {
+    let pos = 12;
+    while (pos + 8 <= buf.length) {
+      const id = buf.toString("ascii", pos, pos + 4);
+      const size = buf.readUInt32LE(pos + 4);
+      if (id === "fmt " && pos + 24 <= buf.length) {
+        numChannels = Math.max(1, buf.readUInt16LE(pos + 10));
+        sampleRate = Math.max(8000, buf.readUInt32LE(pos + 12));
+        bitsPerSample = Math.max(8, buf.readUInt16LE(pos + 22));
+      } else if (id === "data") {
+        dataOffset = pos + 8;
+        dataSize = Math.min(size, buf.length - dataOffset);
+        break;
+      }
+      pos += 8 + size + (size % 2);
+    }
+  }
+
+  const bytesPerSample = Math.max(1, Math.floor(bitsPerSample / 8));
+  const frameStride = bytesPerSample * numChannels;
+  const totalSamples = Math.floor(dataSize / frameStride);
+  const durationSec = totalSamples / sampleRate;
+
+  const frameDurSec = 0.01;
+  const samplesPerFrame = Math.max(1, Math.round(sampleRate * frameDurSec));
+  const frameCount = Math.max(1, Math.floor(totalSamples / samplesPerFrame));
+  const rmsFrames: number[] = new Array(frameCount).fill(0);
+
+  for (let f = 0; f < frameCount; f++) {
+    let sumSq = 0;
+    const startSample = f * samplesPerFrame;
+    for (let s = 0; s < samplesPerFrame; s++) {
+      const bytePos = dataOffset + (startSample + s) * frameStride;
+      if (bytePos + 1 >= buf.length) break;
+      const val =
+        bytesPerSample === 2
+          ? buf.readInt16LE(bytePos) / 32768
+          : (buf.readUInt8(bytePos) - 128) / 128;
+      sumSq += val * val;
+    }
+    rmsFrames[f] = Math.sqrt(sumSq / samplesPerFrame);
+  }
+
+  const nonZero = rmsFrames.filter((v) => v > 0.0001).sort((a, b) => a - b);
+  const noiseFloor =
+    nonZero.length > 0 ? nonZero[Math.floor(nonZero.length * 0.12)] : 0.002;
+  const speechPeak =
+    nonZero.length > 0 ? nonZero[Math.floor(nonZero.length * 0.92)] : 0.08;
+  const thresh = Math.max(0.0055, noiseFloor * 2.8, speechPeak * 0.055);
+
+  let onsetFrame = 0;
+  for (let f = 0; f < frameCount; f++) {
+    const windowHits =
+      (rmsFrames[f] >= thresh ? 1 : 0) +
+      (f + 1 < frameCount && rmsFrames[f + 1] >= thresh ? 1 : 0) +
+      (f + 2 < frameCount && rmsFrames[f + 2] >= thresh ? 1 : 0);
+    if (windowHits >= 2) {
+      onsetFrame = f;
+      break;
+    }
+  }
+
+  let offsetFrame = frameCount - 1;
+  for (let f = frameCount - 1; f >= onsetFrame; f--) {
+    const windowHits =
+      (rmsFrames[f] >= thresh ? 1 : 0) +
+      (f - 1 >= 0 && rmsFrames[f - 1] >= thresh ? 1 : 0);
+    if (windowHits >= 1 && rmsFrames[f] >= thresh * 0.9) {
+      offsetFrame = f;
+      break;
+    }
+  }
+
+  const speechOnsetSec = Number((onsetFrame * frameDurSec).toFixed(3));
+  const speechOffsetSec = Number(
+    Math.min(durationSec, (offsetFrame + 1) * frameDurSec).toFixed(3)
+  );
+
+  const pauses: PcmPause[] = [];
+  let quietStart = -1;
+  for (let f = onsetFrame; f <= offsetFrame; f++) {
+    if (rmsFrames[f] < thresh) {
+      if (quietStart === -1) quietStart = f;
+    } else if (quietStart !== -1) {
+      const len = f - quietStart;
+      if (len >= 6) {
+        const startSec = quietStart * frameDurSec;
+        const endSec = f * frameDurSec;
+        pauses.push({
+          startSec,
+          endSec,
+          midSec: (startSec + endSec) / 2,
+          durSec: endSec - startSec,
+        });
+      }
+      quietStart = -1;
+    }
+  }
+
+  return {
+    durationSec: Number(durationSec.toFixed(3)),
+    speechOnsetSec,
+    speechOffsetSec: Math.max(speechOnsetSec + 0.25, speechOffsetSec),
+    frameDurSec,
+    rmsFrames,
+    pauses,
+  };
+}
+
+function estimatePhraseWeight(text: string): number {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  let weight = 0;
+  for (const w of words) {
+    const syl = w.toLowerCase().match(/[aeiouy]+/g)?.length || 1;
+    weight += Math.max(1, syl) * 0.65 + 0.45;
+    if (/[,;:]$/.test(w)) weight += 0.6;
+    if (/[!?]$/.test(w)) weight += 1.1;
+    else if (/\.$/.test(w)) weight += 0.85;
+  }
+  return Math.max(1, weight);
+}
+
+function distributeWordsInSegment(
+  segText: string,
+  startSec: number,
+  endSec: number,
+  geminiWords?: AlignedWord[]
+): AlignedWord[] {
+  const words = segText.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+
+  if (
+    geminiWords &&
+    geminiWords.length === words.length &&
+    geminiWords.every(
+      (w, idx) =>
+        w.startSec < w.endSec &&
+        w.startSec >= startSec - 0.15 &&
+        w.endSec <= endSec + 0.15 &&
+        (idx === 0 || w.startSec >= geminiWords[idx - 1].startSec - 0.02)
+    )
+  ) {
+    return words.map((word, idx) => {
+      const gw = geminiWords[idx];
+      const ws = Math.max(startSec, Math.min(endSec - 0.03, gw.startSec));
+      const we = Math.max(ws + 0.03, Math.min(endSec, gw.endSec));
+      return {
+        word,
+        startSec: Number(ws.toFixed(3)),
+        endSec: Number(we.toFixed(3)),
+      };
+    });
+  }
+
+  const weights = words.map((w) => {
+    const syl = w.toLowerCase().match(/[aeiouy]+/g)?.length || 1;
+    return Math.max(1, syl) * 0.65 + 0.35;
+  });
+  const totalW = weights.reduce((a, b) => a + b, 0) || 1;
+  const span = Math.max(0.1, endSec - startSec);
+  let cursor = startSec;
+
+  return words.map((word, i) => {
+    const dur =
+      i === words.length - 1 ? endSec - cursor : span * (weights[i] / totalW);
+    const ws = cursor;
+    const we = cursor + dur;
+    cursor = we;
+    return {
+      word,
+      startSec: Number(ws.toFixed(3)),
+      endSec: Number(we.toFixed(3)),
+    };
+  });
+}
+
+async function alignAudioWithGemini(
+  base64Wav: string,
+  segments: string[],
+  durationSec: number
+): Promise<Array<{ startSec: number; endSec: number; words?: AlignedWord[] }> | null> {
+  if (!process.env.GEMINI_API_KEY || segments.length === 0) return null;
+  try {
+    const ai = getGeminiClient();
+    const numbered = segments.map((s, i) => `${i}: "${s}"`).join("\n");
+    const call = ai.models.generateContent({
+      model: "gemini-4-hydrogen",
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              mimeType: "audio/wav",
+              data: base64Wav,
+            },
+          },
+          {
+            text: `Listen carefully to this ${durationSec.toFixed(2)}-second English speech audio and perform exact forced alignment for the following ordered subtitle segments:\n${numbered}\n\nReturn the exact startSec and endSec (in decimal seconds from 0.00 to ${durationSec.toFixed(2)}) for every segment index 0..${segments.length - 1}, along with each spoken word's startSec and endSec.`,
+          },
+        ],
+      },
+      config: {
+        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            segments: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  index: { type: Type.INTEGER },
+                  startSec: { type: Type.NUMBER },
+                  endSec: { type: Type.NUMBER },
+                  words: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        word: { type: Type.STRING },
+                        startSec: { type: Type.NUMBER },
+                        endSec: { type: Type.NUMBER },
+                      },
+                      required: ["word", "startSec", "endSec"],
+                    },
+                  },
+                },
+                required: ["index", "startSec", "endSec"],
+              },
+            },
+          },
+          required: ["segments"],
+        },
+      },
+    });
+
+    const resp = await Promise.race([
+      call,
+      new Promise<never>((_, rej) =>
+        setTimeout(() => rej(new Error("Alignment timeout")), 8000)
+      ),
+    ]);
+    const txt = (resp.text ?? "").trim();
+    if (!txt) return null;
+    const parsed = JSON.parse(txt) as {
+      segments?: Array<{
+        index: number;
+        startSec: number;
+        endSec: number;
+        words?: AlignedWord[];
+      }>;
+    };
+    if (!parsed.segments || parsed.segments.length !== segments.length) {
+      return null;
+    }
+    const sorted = [...parsed.segments].sort((a, b) => a.index - b.index);
+    const valid = sorted.every(
+      (s, idx) =>
+        typeof s.startSec === "number" &&
+        typeof s.endSec === "number" &&
+        s.startSec >= 0 &&
+        s.endSec > s.startSec &&
+        s.endSec <= durationSec + 0.2 &&
+        (idx === 0 || s.startSec >= sorted[idx - 1].endSec - 0.15)
+    );
+    return valid ? sorted : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildAlignedSegments(
+  segmentsInput: string[],
+  pcm: PcmAnalysis,
+  geminiAligned: Array<{ startSec: number; endSec: number; words?: AlignedWord[] }> | null
+): AudioAlignmentResult {
+  const segments = segmentsInput.map((s) => s.trim()).filter(Boolean);
+  const segStart0 = Math.max(0, Number((pcm.speechOnsetSec - 0.02).toFixed(3)));
+  const segEndLast = Math.min(
+    pcm.durationSec,
+    Number((pcm.speechOffsetSec + 0.05).toFixed(3))
+  );
+
+  if (segments.length <= 1) {
+    const text = segments[0] || "";
+    return {
+      rawDurationSec: pcm.durationSec,
+      speechOnsetSec: segStart0,
+      speechOffsetSec: segEndLast,
+      segments: [
+        {
+          text,
+          startSec: segStart0,
+          endSec: Math.max(segStart0 + 0.25, segEndLast),
+          words: distributeWordsInSegment(
+            text,
+            segStart0,
+            Math.max(segStart0 + 0.25, segEndLast),
+            geminiAligned?.[0]?.words
+          ),
+        },
+      ],
+      method: geminiAligned
+        ? "gemini-audio-forced-alignment+pcm-vad"
+        : "pcm-vad-syllable-dp",
+    };
+  }
+
+  const N = segments.length;
+  const weights = segments.map(estimatePhraseWeight);
+  const totalWeight = weights.reduce((a, b) => a + b, 0) || 1;
+  const activeSpan = Math.max(0.4, segEndLast - segStart0);
+
+  // Expected boundaries k = 1..N-1
+  const expectedBoundaries: number[] = [];
+  let cumW = 0;
+  for (let k = 0; k < N - 1; k++) {
+    cumW += weights[k];
+    const sylB = segStart0 + activeSpan * (cumW / totalWeight);
+    if (geminiAligned) {
+      const gemB =
+        (geminiAligned[k].endSec + geminiAligned[k + 1].startSec) / 2;
+      expectedBoundaries.push(0.65 * gemB + 0.35 * sylB);
+    } else {
+      expectedBoundaries.push(sylB);
+    }
+  }
+
+  // Monotonic greedy/DP matching from N-1 boundaries to detected acoustic pauses
+  const chosenPause: Array<PcmPause | null> = new Array(N - 1).fill(null);
+  const pauses = pcm.pauses;
+
+  if (pauses.length > 0) {
+    // Score matrix [boundary k][pause j]
+    let minPauseIdx = 0;
+    for (let k = 0; k < N - 1; k++) {
+      const target = expectedBoundaries[k];
+      let bestIdx = -1;
+      let bestScore = -Infinity;
+      const prevBound = k === 0 ? segStart0 + 0.22 : (chosenPause[k - 1]?.midSec ?? expectedBoundaries[k - 1]) + 0.25;
+      const remainingNeed = (N - 2 - k) * 0.28;
+      const maxBound = segEndLast - 0.25 - remainingNeed;
+
+      for (let j = minPauseIdx; j < pauses.length; j++) {
+        const p = pauses[j];
+        if (p.midSec < prevBound || p.midSec > maxBound) continue;
+        const dist = Math.abs(p.midSec - target);
+        if (dist > 0.78) continue;
+        const score = p.durSec * 3.0 - dist * 1.9;
+        if (score > bestScore) {
+          bestScore = score;
+          bestIdx = j;
+        }
+      }
+      if (bestIdx !== -1) {
+        chosenPause[k] = pauses[bestIdx];
+        minPauseIdx = bestIdx + 1;
+      }
+    }
+  }
+
+  // Compute exact segment boundaries [startSec, endSec] snapped to acoustic pauses or RMS minima
+  const segStarts: number[] = new Array(N).fill(0);
+  const segEnds: number[] = new Array(N).fill(0);
+  segStarts[0] = segStart0;
+  segEnds[N - 1] = Math.max(segStart0 + 0.4, segEndLast);
+
+  for (let k = 0; k < N - 1; k++) {
+    const p = chosenPause[k];
+    if (p) {
+      const endPrev = Math.min(p.endSec - 0.02, p.startSec + 0.045);
+      const startNext = Math.max(endPrev, p.endSec - 0.03);
+      segEnds[k] = Number(Math.max(segStarts[k] + 0.18, endPrev).toFixed(3));
+      segStarts[k + 1] = Number(
+        Math.min(segEnds[N - 1] - 0.18 * (N - 1 - k), Math.max(segEnds[k], startNext)).toFixed(3)
+      );
+    } else {
+      const minBound = segStarts[k] + 0.22;
+      const maxBound = segEnds[N - 1] - 0.22 * (N - 1 - k);
+      const center = Math.max(minBound, Math.min(maxBound, expectedBoundaries[k]));
+      const searchStart = Math.max(minBound, center - 0.2);
+      const searchEnd = Math.min(maxBound, center + 0.2);
+      const f0 = Math.floor(searchStart / pcm.frameDurSec);
+      const f1 = Math.min(
+        pcm.rmsFrames.length - 1,
+        Math.ceil(searchEnd / pcm.frameDurSec)
+      );
+      let bestF = Math.round(center / pcm.frameDurSec);
+      let bestRms = Infinity;
+      for (let f = f0; f <= f1; f++) {
+        if (pcm.rmsFrames[f] < bestRms) {
+          bestRms = pcm.rmsFrames[f];
+          bestF = f;
+        }
+      }
+      const splitSec = Number((bestF * pcm.frameDurSec).toFixed(3));
+      segEnds[k] = Math.max(segStarts[k] + 0.18, splitSec);
+      segStarts[k + 1] = segEnds[k];
+    }
+  }
+
+  const alignedSegments: AlignedSegment[] = segments.map((text, idx) => ({
+    text,
+    startSec: segStarts[idx],
+    endSec: Math.max(segStarts[idx] + 0.15, segEnds[idx]),
+    words: distributeWordsInSegment(
+      text,
+      segStarts[idx],
+      Math.max(segStarts[idx] + 0.15, segEnds[idx]),
+      geminiAligned?.[idx]?.words
+    ),
+  }));
+
+  return {
+    rawDurationSec: pcm.durationSec,
+    speechOnsetSec: segStart0,
+    speechOffsetSec: segEndLast,
+    segments: alignedSegments,
+    method: geminiAligned
+      ? "gemini-audio-forced-alignment+pcm-vad"
+      : "pcm-vad-syllable-dp",
+  };
 }
 
 async function startServer() {
@@ -405,17 +880,25 @@ Requirements:
         return;
       }
 
+      const segments = Array.isArray(body?.segments)
+        ? body.segments.map((s) => String(s).trim()).filter(Boolean)
+        : cleanText
+            .split(/(?<=[.!?])\s+/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+
       const profile = LOCKED_VOICE_PROFILES[voiceId];
       const emotionCue = profile.emotions[beatNumber] || profile.emotions[1];
-      const cacheKey = `v3::${FIXED_TTS_MODEL}::${voiceId}::${profile.voiceName}::${beatNumber}::${cleanText}`;
+      const cacheKey = `v4::${FIXED_TTS_MODEL}::${voiceId}::${profile.voiceName}::${beatNumber}::${cleanText}::${segments.join("|")}`;
       const cached = ttsCache.get(cacheKey);
       if (cached) {
         res.json({
-          audioBase64: cached,
+          audioBase64: cached.audioBase64,
           mimeType: "audio/wav",
           voiceId,
           voiceName: profile.voiceName,
           model: FIXED_TTS_MODEL,
+          alignment: cached.alignment,
         });
         return;
       }
@@ -492,11 +975,18 @@ Requirements:
         return;
       }
 
+      const pcm = analyzeWavPcm(base64Audio);
+      const geminiAligned =
+        segments.length > 1
+          ? await alignAudioWithGemini(base64Audio, segments, pcm.durationSec)
+          : null;
+      const alignment = buildAlignedSegments(segments, pcm, geminiAligned);
+
       if (ttsCache.size > 120) {
         const firstKey = ttsCache.keys().next().value;
         if (firstKey) ttsCache.delete(firstKey);
       }
-      ttsCache.set(cacheKey, base64Audio);
+      ttsCache.set(cacheKey, { audioBase64: base64Audio, alignment });
 
       res.json({
         audioBase64: base64Audio,
@@ -504,6 +994,7 @@ Requirements:
         voiceId,
         voiceName: profile.voiceName,
         model: FIXED_TTS_MODEL,
+        alignment,
       });
     } catch (err: unknown) {
       const rawMsg = err instanceof Error ? err.message : "Speech synthesis failed.";

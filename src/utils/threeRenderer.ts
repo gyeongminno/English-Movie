@@ -1,14 +1,19 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import { PALETTE } from "../data/defaults";
-import type { AnimationStyle, TimedLine } from "../types";
+import { DEFAULT_TIMELINE_MARKERS, PALETTE } from "../data/defaults";
+import type {
+  AnimationStyle,
+  MasterTimelineMarkers,
+  TimedLine,
+} from "../types";
 
 export interface ThreeRenderOptions {
   timeSec: number;
   style: AnimationStyle;
   mode: "3d-animation" | "3d-slideshow";
   timedLines: TimedLine[];
+  timelineMarkers?: MasterTimelineMarkers;
 }
 
 export function detectSoftwareWebGL(): boolean {
@@ -81,32 +86,51 @@ export interface GraphiteStroke {
   width: number;
 }
 
+const FLOWER_DOT_COORDS: Array<{ pos: Pt2; radius: number }> = [
+  { pos: [0.05, 1.85], radius: 11.5 },  // Beat 1: First little dot
+  { pos: [-0.06, 0.92], radius: 9.5 },  // Stem mid / left leaf base
+  { pos: [-1.1, 0.08], radius: 9.5 },   // Left leaf tip
+  { pos: [0.14, 0.55], radius: 9.5 },   // Right leaf base
+  { pos: [1.05, -0.28], radius: 9.5 },  // Right leaf tip
+  { pos: [0.0, -0.55], radius: 9.5 },   // Calyx / stem top
+  { pos: [-1.05, -0.78], radius: 9.5 }, // Lower-left petal outer
+  { pos: [1.05, -0.78], radius: 9.5 },  // Lower-right petal outer
+  { pos: [-0.72, -1.62], radius: 9.5 }, // Upper-left petal apex
+  { pos: [0.72, -1.62], radius: 9.5 },  // Upper-right petal apex
+  { pos: [0.0, -2.05], radius: 10.0 },  // Top crown petal peak
+  { pos: [0.0, -0.94], radius: 10.0 },  // Flower center
+];
+
 /**
  * Timed graphite dots placed by the Yellow Pencil across Beat 1 (1st dot) and Beat 2
- * (11 rhythmic scattered dots), positioned secretly along the flower's silhouette.
+ * (11 rhythmic scattered dots), aligned directly to MasterTimelineMarkers.
  */
-export function buildFlowerDotNodes(): GraphiteDotNode[] {
-  return [
-    { timeSec: 1.45, pos: [0.05, 1.85], radius: 11.5 },  // Beat 1: First little dot
-    { timeSec: 7.60, pos: [-0.06, 0.92], radius: 9.5 },  // Stem mid / left leaf base
-    { timeSec: 8.02, pos: [-1.1, 0.08], radius: 9.5 },   // Left leaf tip
-    { timeSec: 8.82, pos: [0.14, 0.55], radius: 9.5 },   // Right leaf base
-    { timeSec: 9.58, pos: [1.05, -0.28], radius: 9.5 },  // Right leaf tip
-    { timeSec: 10.30, pos: [0.0, -0.55], radius: 9.5 },  // Calyx / stem top
-    { timeSec: 10.98, pos: [-1.05, -0.78], radius: 9.5 },// Lower-left petal outer
-    { timeSec: 11.62, pos: [1.05, -0.78], radius: 9.5 }, // Lower-right petal outer
-    { timeSec: 12.26, pos: [-0.72, -1.62], radius: 9.5 },// Upper-left petal apex
-    { timeSec: 12.92, pos: [0.72, -1.62], radius: 9.5 }, // Upper-right petal apex
-    { timeSec: 13.62, pos: [0.0, -2.05], radius: 10.0 }, // Top crown petal peak
-    { timeSec: 14.44, pos: [0.0, -0.94], radius: 10.0 }, // Flower center
-  ];
+export function buildFlowerDotNodes(
+  markers: MasterTimelineMarkers = DEFAULT_TIMELINE_MARKERS
+): GraphiteDotNode[] {
+  const b2Times = markers.beat2DotTimes;
+  return FLOWER_DOT_COORDS.map((coord, idx) => {
+    if (idx === 0) {
+      return { timeSec: markers.dot1TapSec, pos: coord.pos, radius: coord.radius };
+    }
+    const fallbackTime =
+      markers.beat2StartSec +
+      ((idx - 1) / 10) * Math.max(2.0, markers.beat3StartSec - markers.beat2StartSec - 0.4);
+    return {
+      timeSec: b2Times[idx - 1] ?? fallbackTime,
+      pos: coord.pos,
+      radius: coord.radius,
+    };
+  });
 }
 
 /**
- * Beat 3 (15.0s -> 19.3s): Pencil physically connects the existing dots with organic
- * graphite lines; Beat 4 (25.2s -> 26.7s): Pencil adds final petal & flourish detail.
+ * Beat 3 (markers.beat3StartSec -> markers.flowerRevealPeakSec + 0.25s): Pencil physically
+ * connects the existing dots with organic graphite lines; Beat 4 adds final petal & stem flourish.
  */
-export function buildBotanicalFlowerStrokes(): GraphiteStroke[] {
+export function buildBotanicalFlowerStrokes(
+  markers: MasterTimelineMarkers = DEFAULT_TIMELINE_MARKERS
+): GraphiteStroke[] {
   const stem = sampleCubic([0.05, 1.85], [-0.42, 1.12], [0.38, 0.25], [0.0, -0.55], 32);
 
   const leftLeaf = [
@@ -170,17 +194,24 @@ export function buildBotanicalFlowerStrokes(): GraphiteStroke[] {
     22
   );
 
+  const s0 = markers.beat3StartSec + 0.04;
+  const sEnd = Math.max(s0 + 2.2, markers.flowerRevealPeakSec + 0.22);
+  const span = sEnd - s0;
+
+  const beat4DetailStart = Math.min(27.0, markers.apologyEndSec + 0.08);
+  const beat4DetailEnd = Math.min(28.5, beat4DetailStart + 1.25);
+
   return [
-    { startSec: 15.05, endSec: 15.85, points: stem, width: 5.2 },
-    { startSec: 15.85, endSec: 16.45, points: leftLeaf, width: 4.5 },
-    { startSec: 16.45, endSec: 17.0, points: rightLeaf, width: 4.5 },
-    { startSec: 17.0, endSec: 17.48, points: petalLowerLeft, width: 4.8 },
-    { startSec: 17.48, endSec: 17.95, points: petalLowerRight, width: 4.8 },
-    { startSec: 17.95, endSec: 18.4, points: petalTopLeft, width: 4.8 },
-    { startSec: 18.4, endSec: 18.85, points: petalTopRight, width: 4.8 },
-    { startSec: 18.85, endSec: 19.25, points: petalCrown, width: 4.8 },
-    { startSec: 19.25, endSec: 19.6, points: centerCircle, width: 4.2 },
-    { startSec: 25.15, endSec: 26.6, points: finalDetail, width: 4.0 },
+    { startSec: s0, endSec: s0 + span * 0.18, points: stem, width: 5.2 },
+    { startSec: s0 + span * 0.18, endSec: s0 + span * 0.31, points: leftLeaf, width: 4.5 },
+    { startSec: s0 + span * 0.31, endSec: s0 + span * 0.43, points: rightLeaf, width: 4.5 },
+    { startSec: s0 + span * 0.43, endSec: s0 + span * 0.54, points: petalLowerLeft, width: 4.8 },
+    { startSec: s0 + span * 0.54, endSec: s0 + span * 0.65, points: petalLowerRight, width: 4.8 },
+    { startSec: s0 + span * 0.65, endSec: s0 + span * 0.75, points: petalTopLeft, width: 4.8 },
+    { startSec: s0 + span * 0.75, endSec: s0 + span * 0.85, points: petalTopRight, width: 4.8 },
+    { startSec: s0 + span * 0.85, endSec: s0 + span * 0.93, points: petalCrown, width: 4.8 },
+    { startSec: s0 + span * 0.93, endSec: sEnd, points: centerCircle, width: 4.2 },
+    { startSec: beat4DetailStart, endSec: beat4DetailEnd, points: finalDetail, width: 4.0 },
   ];
 }
 
@@ -209,16 +240,17 @@ export function sampleDotPositionAlongStrokes(
  */
 export function sampleBeat2PencilTap(
   nodes: GraphiteDotNode[],
-  t: number
+  t: number,
+  beat2StartSec = 7.0
 ): { x: number; y: number; z: number; tapping: boolean } {
   const b2 = nodes.slice(1); // 11 Beat-2 dot nodes
   if (t <= b2[0].timeSec) {
-    const p = easeInOut((t - 7.0) / Math.max(0.1, b2[0].timeSec - 7.0));
+    const p = easeInOut((t - beat2StartSec) / Math.max(0.1, b2[0].timeSec - beat2StartSec));
     const arc = Math.sin(p * Math.PI) * 0.28;
     return {
-      x: lerp(0.05, b2[0].pos[0], p),
-      y: lerp(0.18, 0.01, p) + arc,
-      z: lerp(1.85, b2[0].pos[1], p),
+      x: lerp(-0.95, b2[0].pos[0], p),
+      y: lerp(0.14, 0.01, p) + arc,
+      z: lerp(1.82, b2[0].pos[1], p),
       tapping: t > b2[0].timeSec - 0.08,
     };
   }
@@ -226,9 +258,8 @@ export function sampleBeat2PencilTap(
     const cur = b2[i];
     const nxt = b2[i + 1];
     if (t >= cur.timeSec && t <= nxt.timeSec) {
-      const span = nxt.timeSec - cur.timeSec;
+      const span = Math.max(0.05, nxt.timeSec - cur.timeSec);
       const p = clamp((t - cur.timeSec) / span);
-      // Pause briefly right on the dot for ~0.12s, then arc gracefully to the next dot
       const moveP = easeInOut(clamp((p - 0.14) / 0.86));
       const arc = Math.sin(moveP * Math.PI) * 0.26;
       return {
@@ -470,6 +501,7 @@ export class ThreeFilmStage {
   private paperMat: THREE.MeshStandardMaterial;
   private dotNodes: GraphiteDotNode[];
   private flowerStrokes: GraphiteStroke[];
+  private activeMarkers: MasterTimelineMarkers = DEFAULT_TIMELINE_MARKERS;
 
   // Reusable math helpers
   private readonly _camTarget = new THREE.Vector3();
@@ -786,7 +818,10 @@ export class ThreeFilmStage {
     return [u, v];
   }
 
-  private updateProgressiveGraphiteCanvas(timeSec: number) {
+  private updateProgressiveGraphiteCanvas(
+    timeSec: number,
+    markers: MasterTimelineMarkers
+  ) {
     const ctx = this.graphiteCtx;
     ctx.clearRect(0, 0, this.graphiteCanvas.width, this.graphiteCanvas.height);
 
@@ -803,8 +838,14 @@ export class ThreeFilmStage {
     }
 
     // 2. Unnecessary stray graphite marks near (1.85, 1.25) wiped by Eraser in Beat 4
-    if (timeSec >= 8.2 && timeSec < 24.75) {
-      const fade = timeSec > 23.75 ? 1 - clamp((timeSec - 23.75) / 0.95) : 1;
+    const strayStart = markers.beat2StartSec + 0.8;
+    const wipeStart = markers.beat4StartSec + 0.35;
+    const wipeEnd = Math.max(wipeStart + 0.45, markers.apologyStartSec - 0.08);
+    if (timeSec >= strayStart && timeSec < wipeEnd) {
+      const fade =
+        timeSec > wipeStart
+          ? 1 - clamp((timeSec - wipeStart) / Math.max(0.25, wipeEnd - wipeStart))
+          : 1;
       ctx.save();
       ctx.globalAlpha = fade;
       ctx.fillStyle = PALETTE.darkGraphite;
@@ -855,9 +896,10 @@ export class ThreeFilmStage {
       ctx.stroke();
     }
 
-    // Delicate stamen dots inside flower center once center finishes (~19.5s)
-    if (timeSec >= 19.5) {
-      const alpha = clamp((timeSec - 19.5) / 0.5);
+    // Delicate stamen dots inside flower center once center finishes
+    const stamenStart = markers.flowerRevealPeakSec + 0.12;
+    if (timeSec >= stamenStart) {
+      const alpha = clamp((timeSec - stamenStart) / 0.45);
       ctx.globalAlpha = alpha;
       ctx.fillStyle = PALETTE.darkGraphite;
       [
@@ -877,7 +919,11 @@ export class ThreeFilmStage {
     this.graphiteTex.needsUpdate = true;
   }
 
-  private applyStyleAndLighting(style: AnimationStyle, timeSec: number) {
+  private applyStyleAndLighting(
+    style: AnimationStyle,
+    timeSec: number,
+    markers: MasterTimelineMarkers
+  ) {
     const is2D = style === "2D animation";
     const isClay = style === "Clay";
     const isWatercolor = style === "Watercolor";
@@ -887,19 +933,21 @@ export class ThreeFilmStage {
     this.eraserBlueMat.roughness = isClay ? 0.94 : is2D ? 0.96 : isLive ? 0.82 : 0.88;
     this.pencilYellowMat.envMapIntensity = is2D || isWatercolor ? 0.16 : 0.65;
 
-    if (timeSec < 7) {
+    if (timeSec < markers.beat2StartSec) {
       this.keyLight.color.setHex(0xfff7ec);
       this.keyLight.intensity = 1.5;
       this.hemiLight.intensity = 0.92;
       this.fillLight.intensity = 0.5;
-    } else if (timeSec < 15) {
+    } else if (timeSec < markers.beat3StartSec) {
       this.keyLight.color.setHex(0xf8fafe);
       this.keyLight.intensity = 1.56;
       this.hemiLight.intensity = 0.84;
       this.fillLight.intensity = 0.44;
-    } else if (timeSec < 23) {
-      // Slightly warmer studio lighting during the overhead flower reveal
-      const p = clamp((timeSec - 16.5) / 3.5);
+    } else if (timeSec < markers.beat4StartSec) {
+      const p = clamp(
+        (timeSec - markers.eraserAmazedSec) /
+          Math.max(0.8, markers.flowerRevealPeakSec - markers.eraserAmazedSec + 1.2)
+      );
       this.keyLight.color.setHex(p > 0.35 ? 0xffecc9 : 0xfbf5ec);
       this.keyLight.intensity = lerp(1.56, 1.62, p);
       this.hemiLight.intensity = lerp(0.86, 0.96, p);
@@ -914,8 +962,21 @@ export class ThreeFilmStage {
 
   renderAtTime(options: ThreeRenderOptions) {
     const t = clamp(options.timeSec, 0, 30);
-    this.applyStyleAndLighting(options.style, t);
-    this.updateProgressiveGraphiteCanvas(t);
+    const markers = options.timelineMarkers ?? DEFAULT_TIMELINE_MARKERS;
+    if (this.activeMarkers !== markers) {
+      this.activeMarkers = markers;
+      this.dotNodes = buildFlowerDotNodes(markers);
+      this.flowerStrokes = buildBotanicalFlowerStrokes(markers);
+    }
+
+    const activeSpeechLine = options.timedLines.find(
+      (l) => t >= l.startSec && t <= l.endSec
+    );
+    const speakingRole = activeSpeechLine?.speaker ?? null;
+    const speakPulse = speakingRole ? Math.sin(t * 14) * 0.018 : 0;
+
+    this.applyStyleAndLighting(options.style, t, markers);
+    this.updateProgressiveGraphiteCanvas(t, markers);
 
     this.pencilGroup.visible = true;
     this.pencilShadow.visible = true;
@@ -924,61 +985,69 @@ export class ThreeFilmStage {
     this.eraserGroup.rotation.set(0, 0, 0);
     this.eraserGroup.scale.set(1, 1, 1);
 
-    if (t < 7) {
-      // --- BEAT 1 (0–7s): Yellow pencil enters, tilts & places 1st graphite dot; Cobalt-blue eraser enters ---
-      if (t < 1.1) {
-        const p = easeInOut(t / 1.1);
+    if (t < markers.beat2StartSec) {
+      // --- BEAT 1: Pencil enters & places 1st dot; Eraser arrives, notices dot & speaks ---
+      const enterEnd = Math.max(0.45, markers.dot1TapSec - 0.22);
+      const tapEnd = markers.dot1TapSec + 0.25;
+      if (t < enterEnd) {
+        const p = easeInOut(t / enterEnd);
         this.pencilGroup.position.set(lerp(-2.4, 0.05, p), lerp(0.85, 0.16, p), 1.85);
         this.pencilGroup.rotation.set(0.14, 0.15, lerp(-0.26, -0.18, p));
         updateEyesOnly(this.pencilEyes, "curious", 0.3, -0.7, t);
-      } else if (t < 1.85) {
-        // Gentle forward tilt tapping onto paper at (0.05, 1.85) around t = 1.45s
-        const tapP = clamp((t - 1.1) / 0.75);
+      } else if (t < tapEnd) {
+        const tapP = clamp((t - enterEnd) / Math.max(0.15, tapEnd - enterEnd));
         const touchDip = tapP < 0.48 ? tapP / 0.48 : 1 - (tapP - 0.48) / 0.52;
         const y = lerp(0.16, 0.005, easeInOut(touchDip));
         this.pencilGroup.position.set(0.05, y, 1.85);
         this.pencilGroup.rotation.set(lerp(0.12, 0.24, touchDip), 0.18, -0.16);
         updateEyesOnly(this.pencilEyes, "curious", 0.0, -0.9, t);
       } else {
-        // Pencil lifts slightly and glides back left, looking curiously at incoming cobalt-blue eraser
-        const settleP = easeInOut((t - 1.85) / 1.6);
+        const settleP = easeInOut((t - tapEnd) / 1.1);
         const px = lerp(0.05, -0.95, settleP);
         this.pencilGroup.position.set(px, 0.12 + Math.sin(t * 2.4) * 0.015, 1.82);
         this.pencilGroup.rotation.set(0.14, lerp(0.18, 0.42, settleP), -0.18);
         updateEyesOnly(this.pencilEyes, "curious", 0.85, 0.1, t);
       }
 
-      // Cobalt-blue eraser slides into frame from right at t = 2.1s -> notices dot
-      const eP = easeInOut((t - 2.1) / 2.2);
-      const ex = lerp(5.8, 1.28, eP);
-      const slideTilt = t > 2.1 && t < 4.3 ? Math.sin(t * 7) * 0.04 : 0.06;
+      // Eraser enters from right and reaches dot right at markers.eraserNoticeDotSec
+      const arrStart = markers.eraserArriveStartSec;
+      const noticeAt = markers.eraserNoticeDotSec;
+      const eP = easeInOut((t - arrStart) / Math.max(0.35, noticeAt - arrStart));
+      const ex = lerp(5.4, 1.28, eP);
+      const slideTilt =
+        t > arrStart && t < noticeAt
+          ? Math.sin(t * 9) * 0.045
+          : 0.05 + (speakingRole === "Eraser" ? speakPulse * 1.4 : 0);
       this.eraserGroup.position.set(ex, 0.59, 1.75);
-      this.eraserGroup.rotation.set(t > 4.4 ? 0.1 : 0.04, -0.36, slideTilt);
+      this.eraserGroup.rotation.set(
+        t >= noticeAt ? 0.1 + (speakingRole === "Eraser" ? speakPulse : 0) : 0.04,
+        -0.36,
+        slideTilt
+      );
       updateEyesOnly(
         this.eraserEyes,
-        t > 3.6 ? "strict" : "curious",
+        t >= noticeAt - 0.1 ? "strict" : "curious",
         -0.8,
-        t > 4.0 ? -0.6 : -0.1,
+        t >= noticeAt - 0.1 ? -0.6 : -0.1,
         t,
         0.9
       );
 
-      // Camera: Macro shot of sharpened tip touching paper (0..2.5s), then widen to show both
-      if (t < 2.5) {
-        const cp = easeInOut(t / 2.5);
-        this._camPos.set(0.05, lerp(0.95, 1.35, cp), lerp(3.45, 4.45, cp));
+      if (t < noticeAt) {
+        const cp = easeInOut(t / Math.max(0.4, noticeAt));
+        this._camPos.set(0.05, lerp(0.95, 1.38, cp), lerp(3.45, 4.55, cp));
         this._camTarget.set(0.05, lerp(0.14, 0.55, cp), 1.85);
       } else {
-        const cp = easeInOut((t - 2.5) / 3.8);
-        this._camPos.set(lerp(0.05, 0.25, cp), lerp(1.35, 1.85, cp), lerp(4.45, 6.2, cp));
+        const cp = easeInOut((t - noticeAt) / 2.2);
+        this._camPos.set(lerp(0.05, 0.25, cp), lerp(1.38, 1.85, cp), lerp(4.55, 6.2, cp));
         this._camTarget.set(lerp(0.05, 0.18, cp), 0.65, 1.78);
       }
-    } else if (t < 15) {
-      // --- BEAT 2 (7–15s): Eraser chases; Pencil rhythmically taps 11 scattered flower dots ---
-      const tap = sampleBeat2PencilTap(this.dotNodes, t);
+    } else if (t < markers.beat3StartSec) {
+      // --- BEAT 2: Eraser chases; Pencil nervously pleads while tapping 11 flower dots ---
+      const tap = sampleBeat2PencilTap(this.dotNodes, t, markers.beat2StartSec);
       this.pencilGroup.position.set(tap.x, tap.y, tap.z);
       this.pencilGroup.rotation.set(
-        tap.tapping ? 0.2 : 0.14,
+        (tap.tapping ? 0.2 : 0.14) + (speakingRole === "Pencil" ? speakPulse : 0),
         0.22 + Math.sin(t * 3.5) * 0.12,
         -0.2 + Math.sin(t * 6) * 0.06
       );
@@ -990,106 +1059,139 @@ export class ThreeFilmStage {
         t
       );
 
-      // Eraser chases behind & attempts to erase marks
-      const lagTap = sampleBeat2PencilTap(this.dotNodes, Math.max(7.1, t - 1.15));
-      const chaseIn = easeInOut((t - 7.0) / 1.3);
+      const lagTap = sampleBeat2PencilTap(
+        this.dotNodes,
+        Math.max(markers.beat2StartSec + 0.05, t - 0.85),
+        markers.beat2StartSec
+      );
+      const chaseIn = easeInOut((t - markers.beat2StartSec) / 0.95);
       const ex = lerp(1.28, lagTap.x + 0.92, chaseIn);
       const ez = lerp(1.75, lagTap.z + 0.62, chaseIn);
       this.eraserGroup.position.set(ex, 0.59, ez);
       this.eraserGroup.rotation.set(0.14, -0.38, Math.sin(t * 9) * 0.07);
       updateEyesOnly(this.eraserEyes, "strict", -0.75, -0.45, t, 1.1);
 
-      // Low-angle tracking close-up so overall flower outline remains hidden
-      const trackP = easeInOut((t - 7.0) / 8.0);
+      const trackP = easeInOut(
+        (t - markers.beat2StartSec) /
+          Math.max(1.0, markers.beat3StartSec - markers.beat2StartSec)
+      );
       this._camPos.set(
         tap.x * 0.65 + 0.45,
         lerp(1.45, 2.05, trackP),
         tap.z + lerp(3.35, 3.85, trackP)
       );
       this._camTarget.set(tap.x + 0.15, 0.52, tap.z);
-    } else if (t < 23) {
-      // --- BEAT 3 (15–23s): Pencil connects existing dots; Eraser watches; Overhead flower reveal! ---
-      const bt = t - 15; // 0..8
+    } else if (t < markers.beat4StartSec) {
+      // --- BEAT 3: Pencil connects dots; Eraser watches, widens eyes at eraserAmazedSec! ---
+      const b3 = markers.beat3StartSec;
+      const revealEnd = markers.flowerRevealPeakSec + 0.22;
       const strokePos = sampleDotPositionAlongStrokes(this.flowerStrokes, t);
-      const px = strokePos ? strokePos[0] : lerp(0.0, -1.68, easeInOut((bt - 4.6) / 1.5));
-      const pz = strokePos ? strokePos[1] : lerp(-0.94, 0.96, easeInOut((bt - 4.6) / 1.5));
+      const exitP = easeInOut((t - revealEnd) / 1.1);
+      const px = strokePos ? strokePos[0] : lerp(0.0, -1.68, exitP);
+      const pz = strokePos ? strokePos[1] : lerp(-0.94, 0.96, exitP);
 
       this.pencilGroup.position.set(px, strokePos ? 0.004 : 0.12, pz);
       this.pencilGroup.rotation.set(0.24, 0.25, -0.22);
       updateEyesOnly(
         this.pencilEyes,
-        bt > 4.6 ? "relaxed" : "curious",
-        bt > 4.6 ? 0.8 : 0.0,
-        bt > 4.6 ? 0.1 : -0.8,
+        t > revealEnd ? "relaxed" : "curious",
+        t > revealEnd ? 0.8 : 0.0,
+        t > revealEnd ? 0.1 : -0.8,
         t
       );
 
-      // Eraser stops moving and watches curiously, then widens eyes in surprise at 18.1s musical accent
-      const ex = lerp(1.35, 2.02, easeInOut(bt / 2.2));
-      const ez = lerp(0.65, 0.35, easeInOut(bt / 2.2));
+      // Eraser stops and watches, then widens eyes & reacts right at markers.eraserAmazedSec!
+      const watchP = easeInOut((t - b3) / Math.max(0.8, markers.eraserAmazedSec - b3));
+      const ex = lerp(1.35, 2.02, watchP);
+      const ez = lerp(0.65, 0.35, watchP);
+      const isAmazed = t >= markers.eraserAmazedSec - 0.1;
       this.eraserGroup.position.set(ex, 0.59, ez);
-      this.eraserGroup.rotation.set(bt > 3.05 ? -0.04 : 0.05, -0.58, bt > 3.05 ? -0.05 : 0);
+      this.eraserGroup.rotation.set(
+        (isAmazed ? -0.04 : 0.05) + (speakingRole === "Eraser" ? speakPulse : 0),
+        -0.58,
+        (isAmazed ? -0.05 : 0) + (speakingRole === "Eraser" ? speakPulse * 1.2 : 0)
+      );
       updateEyesOnly(
         this.eraserEyes,
-        bt > 3.05 ? "amazed" : "curious",
+        isAmazed ? "amazed" : "curious",
         -0.8,
         -0.25,
         t,
         0.4
       );
 
-      // Extreme close-up connecting dots (0..1.6s), then smooth crane up to overhead wide flower reveal!
-      const revealP = easeInOut((bt - 1.6) / 4.4);
+      // Close-up connecting stem, then smooth crane up to overhead flower reveal by flowerRevealPeakSec
+      const craneStart = b3 + 0.65;
+      const revealP = easeInOut(
+        (t - craneStart) / Math.max(1.0, markers.flowerRevealPeakSec - craneStart)
+      );
       this._camPos.set(
         lerp(px * 0.4, 0.15, revealP),
         lerp(1.45, 6.6, revealP),
         lerp(pz + 2.4, 3.6, revealP)
       );
-      this._camTarget.set(lerp(px, 0.08, revealP), lerp(0.18, 0.04, revealP), lerp(pz, -0.15, revealP));
+      this._camTarget.set(
+        lerp(px, 0.08, revealP),
+        lerp(0.18, 0.04, revealP),
+        lerp(pz, -0.15, revealP)
+      );
     } else {
-      // --- BEAT 4 (23–30s): Eraser wipes stray marks, Pencil adds final detail, apologetic tilt & peaceful art print ---
-      const bt = t - 23; // 0..7
+      // --- BEAT 4: Eraser wipes stray marks, apologizes at apologyStartSec; Pencil replies at pencilRespondSec ---
+      const b4 = markers.beat4StartSec;
+      const wipeStart = b4 + 0.35;
+      const wipeEnd = Math.max(wipeStart + 0.45, markers.apologyStartSec - 0.08);
+      const apologyStart = markers.apologyStartSec;
+      const apologyEnd = markers.apologyEndSec;
 
-      // Eraser moves to stray marks at (1.85, 1.25), wipes gently, then tilts toward Pencil in apology
       let ex = 2.02;
       let ez = 0.35;
       let erotZ = 0;
       let erotY = -0.58;
-      if (bt < 0.85) {
-        const p = easeInOut(bt / 0.85);
+      if (t < wipeStart) {
+        const p = easeInOut((t - b4) / Math.max(0.2, wipeStart - b4));
         ex = lerp(2.02, 1.85, p);
         ez = lerp(0.35, 1.25, p);
-      } else if (bt < 1.9) {
-        ex = 1.85 + Math.sin((bt - 0.85) * 14) * 0.18;
+      } else if (t < wipeEnd) {
+        ex = 1.85 + Math.sin((t - wipeStart) * 14) * 0.18;
         ez = 1.25;
-        erotZ = Math.sin((bt - 0.85) * 14) * 0.09;
+        erotZ = Math.sin((t - wipeStart) * 14) * 0.09;
       } else {
-        const p = easeInOut((bt - 1.9) / 1.8);
+        const p = easeInOut((t - wipeEnd) / 0.9);
         ex = lerp(1.85, 1.65, p);
         ez = lerp(1.25, 1.08, p);
         erotY = lerp(-0.58, -0.45, p);
-        // Gentle apologetic tilt toward Pencil around 25.0s..27.4s
-        const tiltEnv = Math.sin(clamp((bt - 2.0) / 2.6) * Math.PI);
-        erotZ = tiltEnv * 0.12;
+        // Gentle apologetic tilt synced directly to Eraser's spoken apology [apologyStart, apologyEnd]
+        const tiltEnv = Math.sin(
+          clamp((t - apologyStart) / Math.max(0.6, apologyEnd - apologyStart)) * Math.PI
+        );
+        erotZ = tiltEnv * 0.13 + (speakingRole === "Eraser" ? speakPulse : 0);
       }
       this.eraserGroup.position.set(ex, 0.59, ez);
-      this.eraserGroup.rotation.set(0.02, erotY, erotZ);
+      this.eraserGroup.rotation.set(
+        0.02 + (speakingRole === "Eraser" ? speakPulse : 0),
+        erotY,
+        erotZ
+      );
       updateEyesOnly(
         this.eraserEyes,
         "relaxed",
-        bt < 4.5 ? -0.65 : -0.35,
+        t < markers.pencilRespondSec ? -0.65 : -0.35,
         -0.1,
         t,
         0.5
       );
 
-      // Yellow pencil adds final detail (25.15..26.6), then rests gracefully beside Eraser & flower
+      // Yellow pencil adds final detail, then rests warmly and responds at pencilRespondSec
       const strokePos = sampleDotPositionAlongStrokes(this.flowerStrokes, t);
+      const detailStroke = this.flowerStrokes[this.flowerStrokes.length - 1];
+      const detailStart = detailStroke?.startSec ?? apologyEnd + 0.08;
+      const detailEnd = detailStroke?.endSec ?? detailStart + 1.25;
+
       let px = -1.68;
       let py = 0.12;
       let pz = 0.96;
-      if (bt < 2.15) {
-        const p = easeInOut(bt / 2.15);
+      if (t < detailStart) {
+        const p = easeInOut((t - b4) / Math.max(0.4, detailStart - b4));
         px = lerp(-1.68, 0.08, p);
         py = lerp(0.12, 0.005, p) + Math.sin(p * Math.PI) * 0.15;
         pz = lerp(0.96, 1.38, p);
@@ -1098,17 +1200,25 @@ export class ThreeFilmStage {
         py = 0.004;
         pz = strokePos[1];
       } else {
-        const p = easeInOut((bt - 3.6) / 1.5);
+        const p = easeInOut((t - detailEnd) / 1.15);
         px = lerp(0.58, -1.58, p);
         py = lerp(0.005, 0.08, p) + Math.sin(p * Math.PI) * 0.14;
         pz = lerp(0.86, 1.05, p);
       }
-      this.pencilGroup.position.set(px, py, pz);
-      this.pencilGroup.rotation.set(0.16, 0.3, -0.22);
+      this.pencilGroup.position.set(
+        px,
+        py + (speakingRole === "Pencil" ? Math.abs(speakPulse) * 0.5 : 0),
+        pz
+      );
+      this.pencilGroup.rotation.set(
+        0.16 + (speakingRole === "Pencil" ? speakPulse * 1.4 : 0),
+        0.3,
+        -0.22
+      );
       updateEyesOnly(this.pencilEyes, "relaxed", 0.55, 0.0, t, 1.3);
 
-      // Pull camera back into balanced minimalist contemporary art-print composition
-      const pullP = easeInOut(bt / 6.8);
+      // Pull camera back smoothly into balanced minimalist contemporary art-print composition
+      const pullP = easeInOut((t - b4) / Math.max(2.0, 29.0 - b4));
       this._camPos.set(
         lerp(0.15, 0.05, pullP),
         lerp(6.4, 5.5, pullP),
@@ -1145,8 +1255,8 @@ export class ThreeFilmStage {
    * Renders the locked Character Reference Sheet (Yellow Pencil + Cobalt-Blue Eraser side-by-side).
    */
   renderReferenceSheet(style: AnimationStyle) {
-    this.applyStyleAndLighting(style, 1.5);
-    this.updateProgressiveGraphiteCanvas(20.0);
+    this.applyStyleAndLighting(style, 1.5, DEFAULT_TIMELINE_MARKERS);
+    this.updateProgressiveGraphiteCanvas(20.0, DEFAULT_TIMELINE_MARKERS);
 
     this.pencilGroup.visible = true;
     this.pencilShadow.visible = true;

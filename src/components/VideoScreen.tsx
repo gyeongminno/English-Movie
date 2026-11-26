@@ -169,7 +169,7 @@ export function VideoScreen({
           setProgressPct(Math.max(8, Math.round(ratio * 100)));
         },
         videoPackage?.musicSeed ?? 1,
-        videoPackage
+        videoPackage && videoPackage.musicSourceLabel.startsWith("Uploaded:")
           ? {
               combinedBuffer: videoPackage.musicBuffer,
               track1Buffer: videoPackage.track1Buffer,
@@ -199,7 +199,11 @@ export function VideoScreen({
     setErrorMessage(null);
     try {
       const nextSeed = videoPackage.musicSeed + 1;
-      const musicPack = await generateOriginalSoundtrack(nextSeed, 48000);
+      const musicPack = await generateOriginalSoundtrack(
+        nextSeed,
+        48000,
+        videoPackage.timelineMarkers
+      );
       onVideoGenerated({
         ...videoPackage,
         musicBuffer: musicPack.combinedBuffer,

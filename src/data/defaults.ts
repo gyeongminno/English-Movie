@@ -268,69 +268,137 @@ export function formatDialogueForDisplay(lines: DialogueLine[]): string {
   return lines.map((l) => `${l.speaker}: "${l.text}"`).join("\n");
 }
 
+export const DEFAULT_TIMELINE_MARKERS: import("../types").MasterTimelineMarkers = {
+  totalDurationSec: 30,
+  dot1TapSec: 0.95,
+  eraserArriveStartSec: 0.85,
+  eraserNoticeDotSec: 1.65,
+  beat1EndSec: 7.05,
+  beat2StartSec: 7.4,
+  beat2SpeechStartSec: 7.55,
+  beat2SpeechEndSec: 12.75,
+  beat2DotTimes: [
+    7.65, 8.12, 8.62, 9.14, 9.68, 10.22, 10.76, 11.3, 11.84, 12.38, 12.92,
+  ],
+  beat3StartSec: 13.15,
+  eraserAmazedSec: 15.25,
+  flowerRevealPeakSec: 17.65,
+  beat3SpeechEndSec: 19.85,
+  beat4StartSec: 20.25,
+  apologyStartSec: 21.45,
+  apologyEndSec: 23.85,
+  pencilRespondSec: 24.3,
+  pencilRespondEndSec: 27.1,
+  creditStartSec: 26.8,
+};
+
 /**
- * Splits a spoken line into timed 1–2 line subtitle chunks so subtitles
- * never exceed two lines at a time and stay word-for-word synchronized.
+ * Wraps a single subtitle phrase onto at most two balanced lines without
+ * omitting, shortening, or altering any word.
+ */
+export function wrapSubtitleToMaxTwoLines(phrase: string): string[] {
+  const clean = phrase.trim().replace(/\s+/g, " ");
+  if (!clean) return [];
+  if (clean.length <= 36) return [clean];
+
+  const words = clean.split(" ");
+  if (words.length <= 1) return [clean];
+
+  const mid = Math.ceil(clean.length / 2);
+  let bestIdx = -1;
+  let bestDist = Infinity;
+  let running = 0;
+
+  for (let i = 0; i < words.length - 1; i++) {
+    running += (i > 0 ? 1 : 0) + words[i].length;
+    const dist = Math.abs(running - mid);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestIdx = i + 1;
+    }
+  }
+
+  if (bestIdx <= 0 || bestIdx >= words.length) return [clean];
+  return [
+    words.slice(0, bestIdx).join(" "),
+    words.slice(bestIdx).join(" "),
+  ];
+}
+
+/**
+ * Splits a dialogue line into ordered, readable phrase segments matching the exact
+ * spoken sentences (combining very short exclamations like "Wow!" with the
+ * following short question while keeping standalone cues like "Oops!" separate).
+ */
+export function splitDialogueIntoSubtitleSegments(text: string): string[] {
+  const clean = text.trim().replace(/\s+/g, " ");
+  if (!clean) return [];
+
+  const rawSentences = clean
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  if (rawSentences.length <= 1) {
+    return rawSentences;
+  }
+
+  const merged: string[] = [];
+  for (let i = 0; i < rawSentences.length; i++) {
+    const cur = rawSentences[i];
+    const next = rawSentences[i + 1];
+
+    // Combine "Wow!" + "Is that a flower?" (total <= 26 chars) while keeping
+    // standalone Beat 1 "Oops!" or Beat 4 "No worries!" crisp and separate.
+    const isShortExclaimToCombine =
+      /^wow[!.]?$/i.test(cur) && next && cur.length + 1 + next.length <= 32;
+
+    if (isShortExclaimToCombine) {
+      merged.push(`${cur} ${next}`);
+      i++;
+      continue;
+    }
+
+    // If a segment is still very long (> 68 chars), split gently at comma/clause boundary
+    if (cur.length > 68) {
+      const words = cur.split(" ");
+      const mid = Math.ceil(words.length / 2);
+      merged.push(words.slice(0, mid).join(" "));
+      merged.push(words.slice(mid).join(" "));
+    } else {
+      merged.push(cur);
+    }
+  }
+
+  return merged;
+}
+
+/**
+ * Preview helper for StoryboardScreen (wraps phrases cleanly into <= 2 lines).
  */
 export function splitSubtitleSegments(
   text: string,
   startSec: number,
   endSec: number
 ): Array<{ lines: string[]; startSec: number; endSec: number }> {
-  const words = text.trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return [];
+  const phrases = splitDialogueIntoSubtitleSegments(text);
+  if (phrases.length === 0) return [];
 
-  const chunks: string[][] = [];
-  let current: string[] = [];
-  let charCount = 0;
-
-  for (const w of words) {
-    const nextLen = charCount + (current.length > 0 ? 1 : 0) + w.length;
-    if (nextLen > 64 && current.length >= 4) {
-      chunks.push(current);
-      current = [w];
-      charCount = w.length;
-    } else {
-      current.push(w);
-      charCount = nextLen;
-      if (/[.!?]$/.test(w) && charCount >= 24) {
-        chunks.push(current);
-        current = [];
-        charCount = 0;
-      }
-    }
-  }
-  if (current.length > 0) {
-    chunks.push(current);
-  }
-
-  const totalWords = words.length;
+  const totalWords = phrases.reduce((a, p) => a + countWordsInText(p), 0) || 1;
   const totalDur = Math.max(0.4, endSec - startSec);
   let cursor = startSec;
 
-  return chunks.map((chunkWords, idx) => {
-    const proportion = chunkWords.length / totalWords;
+  return phrases.map((phrase, idx) => {
+    const words = countWordsInText(phrase);
     const segDur =
-      idx === chunks.length - 1 ? endSec - cursor : totalDur * proportion;
+      idx === phrases.length - 1
+        ? endSec - cursor
+        : totalDur * (words / totalWords);
     const segStart = cursor;
     const segEnd = cursor + segDur;
     cursor = segEnd;
-
-    const full = chunkWords.join(" ");
-    if (full.length <= 36) {
-      return { lines: [full], startSec: segStart, endSec: segEnd };
-    }
-
-    const mid = Math.ceil(full.length / 2);
-    let bestBreak = full.lastIndexOf(" ", mid);
-    if (bestBreak < 10) {
-      bestBreak = full.indexOf(" ", mid);
-    }
-    if (bestBreak === -1) {
-      return { lines: [full], startSec: segStart, endSec: segEnd };
-    }
     return {
-      lines: [full.slice(0, bestBreak).trim(), full.slice(bestBreak + 1).trim()],
+      lines: wrapSubtitleToMaxTwoLines(phrase),
       startSec: segStart,
       endSec: segEnd,
     };

@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FILM_CREDIT_TEXT } from "../data/defaults";
-import type { Beat, GeneratedVideoPackage } from "../types";
+import type { Beat, GeneratedVideoPackage, SpeakerRole } from "../types";
 import {
   CANVAS_HEIGHT,
   CANVAS_WIDTH,
@@ -49,6 +49,12 @@ export function StoryPlayer({
   const [isMuted, setIsMuted] = useState(false);
   const [showKorean, setShowKorean] = useState(false);
 
+  const [liveFallbackSub, setLiveFallbackSub] = useState<{
+    lines: string[];
+    korean: string;
+    speaker: SpeakerRole;
+  } | null>(null);
+
   const audioCtxRef = useRef<AudioContext | null>(null);
   const voiceGainRef = useRef<GainNode | null>(null);
   const musicGainRef = useRef<GainNode | null>(null);
@@ -56,10 +62,13 @@ export function StoryPlayer({
   const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
 
   const rafRef = useRef<number | null>(null);
+  const playbackSessionRef = useRef<number>(0);
+  const audioCtxAnchorRef = useRef<number | null>(null);
   const playStartPerfRef = useRef<number>(0);
   const playOffsetRef = useRef<number>(0);
   const currentTimeRef = useRef<number>(0);
   const spokenFallbackIdsRef = useRef<Set<string>>(new Set());
+  const speechSynthActiveRef = useRef<boolean>(false);
 
   const videoPkgRef = useRef(videoPackage);
   videoPkgRef.current = videoPackage;
@@ -75,6 +84,7 @@ export function StoryPlayer({
         style: pkg.style,
         mode: pkg.mode,
         timedLines: pkg.timedLines,
+        timelineMarkers: pkg.timelineMarkers,
       });
       return;
     }
@@ -86,6 +96,8 @@ export function StoryPlayer({
       style: pkg.style,
       mode: pkg.mode === "3d-slideshow" ? "slideshow" : "animation",
       timedLines: pkg.timedLines,
+      timedSegments: pkg.timedSegments,
+      timelineMarkers: pkg.timelineMarkers,
       drawSubtitles: false,
     });
   }, []);
@@ -144,6 +156,8 @@ export function StoryPlayer({
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
+    speechSynthActiveRef.current = false;
+    setLiveFallbackSub(null);
   }, []);
 
   // Live gain updates for mute / volume sliders
@@ -154,26 +168,28 @@ export function StoryPlayer({
     if (voiceGainRef.current) {
       voiceGainRef.current.gain.value = voiceVolume;
     }
+    const ctx = audioCtxRef.current;
     if (
       musicGainRef.current &&
-      audioCtxRef.current &&
-      audioCtxRef.current.state === "running" &&
-      isPlaying
+      ctx &&
+      ctx.state === "running" &&
+      isPlaying &&
+      audioCtxAnchorRef.current !== null
     ) {
-      const elapsed = (performance.now() - playStartPerfRef.current) / 1000;
+      const elapsed = Math.max(0, ctx.currentTime - audioCtxAnchorRef.current);
       const offset = playOffsetRef.current + elapsed;
       buildDuckingEnvelope(
         musicGainRef.current.gain,
         musicVolume,
         videoPackage.timedLines,
-        audioCtxRef.current.currentTime,
+        ctx.currentTime,
         offset
       );
     }
   }, [isMuted, voiceVolume, musicVolume, isPlaying, videoPackage.timedLines]);
 
   const scheduleAudioFrom = useCallback(
-    (offsetSec: number) => {
+    async (offsetSec: number, sessionId: number) => {
       stopAudio();
       spokenFallbackIdsRef.current.clear();
 
@@ -187,8 +203,10 @@ export function StoryPlayer({
       }
       const ctx = audioCtxRef.current;
       if (ctx.state === "suspended") {
-        void ctx.resume();
+        await ctx.resume().catch(() => undefined);
       }
+
+      if (sessionId !== playbackSessionRef.current) return;
 
       if (!masterGainRef.current || masterGainRef.current.context !== ctx) {
         const master = ctx.createGain();
@@ -208,67 +226,72 @@ export function StoryPlayer({
       }
 
       const nowCtx = ctx.currentTime;
+      audioCtxAnchorRef.current = nowCtx;
+      playStartPerfRef.current = performance.now();
+
+      const pkg = videoPkgRef.current;
 
       // 1. Schedule continuous 30s two-track instrumental soundtrack with automatic voice ducking
-      if (videoPackage.musicBuffer && musicGainRef.current) {
+      if (pkg.musicBuffer && musicGainRef.current) {
         const mSrc = ctx.createBufferSource();
-        mSrc.buffer = videoPackage.musicBuffer;
+        mSrc.buffer = pkg.musicBuffer;
         buildDuckingEnvelope(
           musicGainRef.current.gain,
           musicVolume,
-          videoPackage.timedLines,
+          pkg.timedLines,
           nowCtx,
           offsetSec
         );
         mSrc.connect(musicGainRef.current);
         mSrc.start(nowCtx, Math.max(0, Math.min(29.9, offsetSec)));
+        mSrc.stop(nowCtx + Math.max(0.05, 30 - offsetSec));
         activeSourcesRef.current.push(mSrc);
       }
 
-      // 2. Schedule spoken English dialogue lines (strictly bounded within [startSec, endSec])
+      // 2. Schedule spoken English dialogue lines using exact measured speech trim boundaries
       if (voiceGainRef.current) {
-        for (const line of videoPackage.timedLines) {
+        for (const line of pkg.timedLines) {
           if (!line.audioBuffer) continue;
           if (line.endSec <= offsetSec) continue;
 
           const src = ctx.createBufferSource();
           src.buffer = line.audioBuffer;
-          const slotDur = Math.max(0.5, line.endSec - line.startSec);
-          if (line.audioBuffer.duration > slotDur) {
-            src.playbackRate.value = Math.min(
-              1.45,
-              line.audioBuffer.duration / slotDur
-            );
-          }
+          const rate = line.playbackRate || 1;
+          src.playbackRate.value = rate;
+
+          const trimStart = Math.max(0, line.trimStartSec ?? 0);
+          const trimEnd = Math.min(
+            line.audioBuffer.duration,
+            line.trimEndSec || line.audioBuffer.duration
+          );
+          const sourceSpan = Math.max(0.1, trimEnd - trimStart);
+          const totalOutputDur = sourceSpan / rate;
+
           src.connect(voiceGainRef.current);
 
           if (offsetSec <= line.startSec) {
             const startAt = nowCtx + (line.startSec - offsetSec);
-            src.start(startAt);
-            src.stop(startAt + slotDur);
+            src.start(startAt, trimStart);
+            src.stop(startAt + totalOutputDur);
           } else {
-            const intoLine = (offsetSec - line.startSec) * src.playbackRate.value;
-            const remainingSlot = Math.max(0.05, line.endSec - offsetSec);
-            if (intoLine < line.audioBuffer.duration) {
-              src.start(nowCtx, intoLine);
-              src.stop(nowCtx + remainingSlot);
+            const elapsedOut = offsetSec - line.startSec;
+            const intoSource = elapsedOut * rate;
+            const remainingSource = trimEnd - (trimStart + intoSource);
+            if (remainingSource > 0.03) {
+              src.start(nowCtx, trimStart + intoSource);
+              src.stop(nowCtx + remainingSource / rate);
             }
           }
           activeSourcesRef.current.push(src);
         }
       }
     },
-    [
-      isMuted,
-      musicVolume,
-      stopAudio,
-      videoPackage.musicBuffer,
-      videoPackage.timedLines,
-      voiceVolume,
-    ]
+    [isMuted, musicVolume, stopAudio, voiceVolume]
   );
 
   const pausePlayback = useCallback(() => {
+    playbackSessionRef.current += 1;
+    audioCtxAnchorRef.current = null;
     if (rafRef.current !== null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
@@ -283,14 +306,17 @@ export function StoryPlayer({
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       }
+      const sessionId = ++playbackSessionRef.current;
       const clamped = Math.max(0, Math.min(29.95, startSec));
       playOffsetRef.current = clamped;
       playStartPerfRef.current = performance.now();
+      audioCtxAnchorRef.current = null;
       currentTimeRef.current = clamped;
       setCurrentTime(clamped);
       setIsPlaying(true);
+      drawAt(clamped);
 
-      scheduleAudioFrom(clamped);
+      void scheduleAudioFrom(clamped, sessionId);
 
       const resolveLockedFallbackVoices = () => {
         if (typeof window === "undefined" || !("speechSynthesis" in window)) {
@@ -312,7 +338,15 @@ export function StoryPlayer({
       };
 
       const step = () => {
-        const elapsed = (performance.now() - playStartPerfRef.current) / 1000;
+        if (sessionId !== playbackSessionRef.current) return;
+
+        const ctx = audioCtxRef.current;
+        const elapsed =
+          ctx &&
+          ctx.state === "running" &&
+          audioCtxAnchorRef.current !== null
+            ? Math.max(0, ctx.currentTime - audioCtxAnchorRef.current)
+            : (performance.now() - playStartPerfRef.current) / 1000;
         const nextT = playOffsetRef.current + elapsed;
 
         if (nextT >= 30) {
@@ -323,34 +357,64 @@ export function StoryPlayer({
           return;
         }
 
+        // Fallback phrase-by-phrase speechSynthesis synced strictly to displayed subtitle
         if (
           !isMuted &&
           voiceVolume > 0.05 &&
           typeof window !== "undefined" &&
           "speechSynthesis" in window
         ) {
-          for (const line of videoPkgRef.current.timedLines) {
+          const pkg = videoPkgRef.current;
+          for (const seg of pkg.timedSegments || []) {
+            const parentLine = pkg.timedLines.find(
+              (l) => l.lineId === seg.lineId
+            );
+            if (parentLine?.audioBuffer) continue;
             if (
-              !line.audioBuffer &&
-              nextT >= line.startSec &&
-              nextT <= line.startSec + 0.35 &&
-              !spokenFallbackIdsRef.current.has(line.lineId)
+              nextT >= seg.startSec &&
+              nextT <= Math.min(seg.endSec, seg.startSec + 0.35) &&
+              !spokenFallbackIdsRef.current.has(seg.id)
             ) {
-              spokenFallbackIdsRef.current.add(line.lineId);
+              spokenFallbackIdsRef.current.add(seg.id);
               const { pencilVoice, eraserVoice } =
                 resolveLockedFallbackVoices();
-              const utter = new SpeechSynthesisUtterance(line.text);
+              const utter = new SpeechSynthesisUtterance(seg.text);
               utter.lang = "en-US";
               utter.volume = Math.min(1, voiceVolume);
-              if (line.voiceId === "PENCIL_VOICE" || line.speaker === "Pencil") {
+              const isPencil =
+                parentLine?.voiceId === "PENCIL_VOICE" ||
+                seg.speaker === "Pencil";
+              if (isPencil) {
                 if (pencilVoice) utter.voice = pencilVoice;
                 utter.pitch = 1.15;
-                utter.rate = 0.96;
+                utter.rate = 0.98;
               } else {
                 if (eraserVoice) utter.voice = eraserVoice;
                 utter.pitch = 0.85;
-                utter.rate = 0.92;
+                utter.rate = 0.94;
               }
+              utter.onstart = () => {
+                if (sessionId !== playbackSessionRef.current) return;
+                speechSynthActiveRef.current = true;
+                setLiveFallbackSub({
+                  lines: seg.displayLines,
+                  korean: seg.koreanTranslation,
+                  speaker: seg.speaker,
+                });
+              };
+              utter.onend = () => {
+                if (sessionId !== playbackSessionRef.current) return;
+                setLiveFallbackSub((prev) =>
+                  prev &&
+                  prev.lines.join("\n") === seg.displayLines.join("\n")
+                    ? null
+                    : prev
+                );
+              };
+              utter.onerror = () => {
+                if (sessionId !== playbackSessionRef.current) return;
+                setLiveFallbackSub(null);
+              };
               window.speechSynthesis.speak(utter);
             }
           }
@@ -372,6 +436,7 @@ export function StoryPlayer({
       startPlaybackFrom(0);
     }
     return () => {
+      playbackSessionRef.current += 1;
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       stopAudio();
       if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
@@ -405,14 +470,42 @@ export function StoryPlayer({
     }
   };
 
-  const activeSub = getActiveSubtitleAt(currentTime, videoPackage.timedLines);
-  const currentBeat =
-    beats.find(
-      (b) => currentTime >= b.startSec && currentTime < b.endSec
-    ) ?? beats[beats.length - 1];
+  const markers = videoPackage.timelineMarkers;
+  const timedSub = getActiveSubtitleAt(
+    currentTime,
+    videoPackage.timedLines,
+    videoPackage.timedSegments
+  );
+  const usingSpeechSynthFallback =
+    isPlaying &&
+    !isMuted &&
+    voiceVolume > 0.05 &&
+    videoPackage.timedLines.every((l) => !l.audioBuffer) &&
+    speechSynthActiveRef.current;
 
+  const activeSub = usingSpeechSynthFallback ? liveFallbackSub : timedSub;
+
+  const beatBounds = [
+    { start: 0, end: markers.beat2StartSec },
+    { start: markers.beat2StartSec, end: markers.beat3StartSec },
+    { start: markers.beat3StartSec, end: markers.beat4StartSec },
+    { start: markers.beat4StartSec, end: 30 },
+  ];
+  const currentBeat =
+    beats.find((b) => {
+      const bound = beatBounds[b.number - 1];
+      if (!bound) return false;
+      return (
+        currentTime >= bound.start &&
+        (b.number === 4 ? currentTime <= 30 : currentTime < bound.end)
+      );
+    }) ?? beats[beats.length - 1];
+
+  const creditStart = markers?.creditStartSec ?? 26.8;
   const creditOpacity =
-    currentTime >= 26.8 ? Math.min(1, (currentTime - 26.8) / 1.1) : 0;
+    currentTime >= creditStart
+      ? Math.min(1, (currentTime - creditStart) / 1.1)
+      : 0;
 
   return (
     <div className="space-y-4">
@@ -485,15 +578,19 @@ export function StoryPlayer({
           </span>
         </div>
 
-        {/* Beat Markers */}
+        {/* Beat Markers (synced to master audio timeline) */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {beats.map((b) => {
             const active = currentBeat?.number === b.number;
+            const bound = beatBounds[b.number - 1] ?? {
+              start: b.startSec,
+              end: b.endSec,
+            };
             return (
               <button
                 key={b.id}
                 type="button"
-                onClick={() => handleSeek(b.startSec)}
+                onClick={() => handleSeek(bound.start)}
                 className={`min-h-[44px] px-3 py-2 rounded-xl text-left text-xs transition-colors border cursor-pointer ${
                   active
                     ? "bg-[#FFFBEB] border-[#F5C518] text-[#242424] font-semibold ring-1 ring-[#F5C518]"
@@ -505,7 +602,7 @@ export function StoryPlayer({
                     Beat {b.number}: {b.title}
                   </span>
                   <span className="font-mono-tabular text-[11px] opacity-80 shrink-0">
-                    {b.startSec}–{b.endSec}s
+                    {bound.start.toFixed(1)}–{bound.end.toFixed(1)}s
                   </span>
                 </div>
               </button>
