@@ -225,7 +225,7 @@ export function StoryPlayer({
         activeSourcesRef.current.push(mSrc);
       }
 
-      // 2. Schedule spoken English dialogue lines
+      // 2. Schedule spoken English dialogue lines (strictly bounded within [startSec, endSec])
       if (voiceGainRef.current) {
         for (const line of videoPackage.timedLines) {
           if (!line.audioBuffer) continue;
@@ -236,18 +236,22 @@ export function StoryPlayer({
           const slotDur = Math.max(0.5, line.endSec - line.startSec);
           if (line.audioBuffer.duration > slotDur) {
             src.playbackRate.value = Math.min(
-              1.25,
+              1.45,
               line.audioBuffer.duration / slotDur
             );
           }
           src.connect(voiceGainRef.current);
 
           if (offsetSec <= line.startSec) {
-            src.start(nowCtx + (line.startSec - offsetSec));
+            const startAt = nowCtx + (line.startSec - offsetSec);
+            src.start(startAt);
+            src.stop(startAt + slotDur);
           } else {
             const intoLine = (offsetSec - line.startSec) * src.playbackRate.value;
+            const remainingSlot = Math.max(0.05, line.endSec - offsetSec);
             if (intoLine < line.audioBuffer.duration) {
               src.start(nowCtx, intoLine);
+              src.stop(nowCtx + remainingSlot);
             }
           }
           activeSourcesRef.current.push(src);
@@ -288,6 +292,25 @@ export function StoryPlayer({
 
       scheduleAudioFrom(clamped);
 
+      const resolveLockedFallbackVoices = () => {
+        if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+          return { pencilVoice: null, eraserVoice: null };
+        }
+        const allVoices = window.speechSynthesis
+          .getVoices()
+          .filter((v) => v.lang.toLowerCase().startsWith("en"));
+        const pencilVoice =
+          allVoices.find((v) => v.lang === "en-US") || allVoices[0] || null;
+        const eraserVoice =
+          allVoices.find(
+            (v) =>
+              v.lang === "en-US" &&
+              pencilVoice &&
+              v.name !== pencilVoice.name
+          ) || pencilVoice;
+        return { pencilVoice, eraserVoice };
+      };
+
       const step = () => {
         const elapsed = (performance.now() - playStartPerfRef.current) / 1000;
         const nextT = playOffsetRef.current + elapsed;
@@ -314,11 +337,20 @@ export function StoryPlayer({
               !spokenFallbackIdsRef.current.has(line.lineId)
             ) {
               spokenFallbackIdsRef.current.add(line.lineId);
+              const { pencilVoice, eraserVoice } =
+                resolveLockedFallbackVoices();
               const utter = new SpeechSynthesisUtterance(line.text);
               utter.lang = "en-US";
-              utter.rate = 0.92;
               utter.volume = Math.min(1, voiceVolume);
-              utter.pitch = line.speaker === "Pencil" ? 1.12 : 0.94;
+              if (line.voiceId === "PENCIL_VOICE" || line.speaker === "Pencil") {
+                if (pencilVoice) utter.voice = pencilVoice;
+                utter.pitch = 1.15;
+                utter.rate = 0.96;
+              } else {
+                if (eraserVoice) utter.voice = eraserVoice;
+                utter.pitch = 0.85;
+                utter.rate = 0.92;
+              }
               window.speechSynthesis.speak(utter);
             }
           }

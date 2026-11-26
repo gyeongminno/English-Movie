@@ -18,7 +18,9 @@ import { useState, type ReactNode } from "react";
 import {
   countBeatWords,
   countTotalScriptWords,
+  getVoiceIdForSpeaker,
   splitSubtitleSegments,
+  VOICE_REGISTRY,
 } from "../data/defaults";
 import type { Beat, ExpressionItem, SceneSettings, SpeakerRole } from "../types";
 
@@ -165,7 +167,14 @@ export function StoryboardScreen({
                   data.soundEffects || b.soundEffects,
                 lines: data.lines!.map((l, i) => ({
                   id: `${b.id}-regen-${Date.now()}-${i}`,
-                  speaker: l.speaker === "Eraser" ? "Eraser" : "Pencil",
+                  speaker:
+                    b.number === 1 || b.number === 3
+                      ? "Eraser"
+                      : b.number === 2
+                      ? "Pencil"
+                      : i === 0
+                      ? "Eraser"
+                      : "Pencil",
                   text: l.text,
                 })),
                 koreanMeaning: data.koreanMeaning || b.koreanMeaning,
@@ -465,7 +474,10 @@ export function StoryboardScreen({
                               ...b.lines,
                               {
                                 id: `${b.id}-l-${Date.now()}`,
-                                speaker: "Pencil",
+                                speaker:
+                                  b.number === 1 || b.number === 3
+                                    ? "Eraser"
+                                    : "Pencil",
                                 text: "",
                               },
                             ],
@@ -485,6 +497,12 @@ export function StoryboardScreen({
                       >
                         <select
                           value={line.speaker}
+                          disabled={beat.number !== 4}
+                          title={
+                            beat.number !== 4
+                              ? `Beat ${beat.number} voice is locked to ${line.speaker}`
+                              : "Select speaker"
+                          }
                           onChange={(e) =>
                             updateBeatField(beat.id, (b) => ({
                               ...b,
@@ -498,10 +516,14 @@ export function StoryboardScreen({
                               ),
                             }))
                           }
-                          className="min-h-[44px] px-3 py-2 rounded-xl border border-[#D4CFC5] bg-[#FAF7EF] text-sm font-semibold text-[#242424]"
+                          className="min-h-[44px] px-3 py-2 rounded-xl border border-[#D4CFC5] bg-[#FAF7EF] text-sm font-semibold text-[#242424] disabled:opacity-75"
                         >
-                          <option value="Eraser">Eraser</option>
-                          <option value="Pencil">Pencil</option>
+                          <option value="Eraser">
+                            Eraser ({VOICE_REGISTRY.Eraser.voiceId})
+                          </option>
+                          <option value="Pencil">
+                            Pencil ({VOICE_REGISTRY.Pencil.voiceId})
+                          </option>
                         </select>
 
                         <input
@@ -580,13 +602,16 @@ export function StoryboardScreen({
                               className="text-sm sm:text-base text-[#242424] leading-relaxed"
                             >
                               <span
-                                className={`font-bold mr-2 ${
+                                className={`font-bold mr-1.5 ${
                                   line.speaker === "Eraser"
                                     ? "text-[#2449D8]"
                                     : "text-[#8A6500]"
                                 }`}
                               >
                                 {line.speaker}:
+                              </span>
+                              <span className="font-mono-tabular text-[11px] font-semibold text-[#6B6862] mr-2">
+                                [{getVoiceIdForSpeaker(line.speaker)}]
                               </span>
                               “{renderHighlightedText(line.text)}”
                             </p>

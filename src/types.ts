@@ -27,6 +27,8 @@ export interface SceneSettings {
 
 export type SpeakerRole = "Pencil" | "Eraser";
 
+export type VoiceId = "PENCIL_VOICE" | "ERASER_VOICE";
+
 export interface DialogueLine {
   id: string;
   speaker: SpeakerRole;
@@ -54,6 +56,7 @@ export interface TimedLine {
   lineId: string;
   beatNumber: 1 | 2 | 3 | 4;
   speaker: SpeakerRole;
+  voiceId: VoiceId;
   text: string;
   koreanTranslation: string;
   startSec: number;

@@ -357,8 +357,9 @@ export function VideoScreen({
               Voice, Two-Track Score & 3D Scene Assembly
             </h2>
             <p className="text-sm text-[#524F4A]">
-              Synthesizes distinct Pencil & Eraser voices, Background Music 1
-              (0–15s) + Background Music 2 (15–30s) with smooth crossfade,
+              Synthesizes two permanent character voices (PENCIL_VOICE · Zephyr
+              &amp; ERASER_VOICE · Charon), Background Music 1 (0–15s) +
+              Background Music 2 (15–30s) with smooth crossfade,
               graphite/eraser foley SFX, and automatic voice ducking.
             </p>
           </div>

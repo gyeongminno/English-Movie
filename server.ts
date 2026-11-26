@@ -75,7 +75,69 @@ interface RegenerateBeatBody {
 interface TtsBody {
   text: string;
   speaker: "Pencil" | "Eraser";
+  voiceId?: "PENCIL_VOICE" | "ERASER_VOICE";
   beatNumber?: number;
+}
+
+const FIXED_TTS_MODEL = "gemini-3.8-flash-tts" as const;
+
+const LOCKED_VOICE_PROFILES = {
+  PENCIL_VOICE: {
+    voiceName: "Zephyr",
+    baseIdentity:
+      "Voice ID PENCIL_VOICE (Yellow Pencil): bright, gentle, warm, youthful medium-high American English voice, curious and expressive, clear natural pronunciation. Maintain this exact same vocal identity, register, accent, and timbre across every scene.",
+    emotions: {
+      1: "Gentle, curious, and warm.",
+      2: "Initially slightly nervous, gradually becoming determined and hopeful.",
+      3: "Gentle and warm.",
+      4: "Understanding, cheerful, and warm.",
+    } as Record<number, string>,
+  },
+  ERASER_VOICE: {
+    voiceName: "Charon",
+    baseIdentity:
+      "Voice ID ERASER_VOICE (Cobalt-Blue Eraser): calm, clear, composed medium-low American English voice, articulate with clear natural pronunciation. Maintain this exact same vocal identity, register, accent, and timbre across every scene.",
+    emotions: {
+      1: "Surprised, dissatisfied, and slightly strict.",
+      2: "Firm and composed.",
+      3: "Surprised, impressed, and increasingly warm.",
+      4: "Gentle, apologetic, and sincere.",
+    } as Record<number, string>,
+  },
+} as const;
+
+function enforceBeatSpeakers(
+  beatNumber: number,
+  lines: Array<{ speaker: "Pencil" | "Eraser"; text: string }>
+): Array<{ speaker: "Pencil" | "Eraser"; text: string }> {
+  if (beatNumber === 1 || beatNumber === 3) {
+    return [{ speaker: "Eraser", text: lines.map((l) => l.text).join(" ").trim() }];
+  }
+  if (beatNumber === 2) {
+    return [{ speaker: "Pencil", text: lines.map((l) => l.text).join(" ").trim() }];
+  }
+  if (lines.length === 1) {
+    return [{ speaker: "Eraser", text: lines[0].text }];
+  }
+  const splitIdx = Math.ceil(lines.length / 2);
+  return [
+    {
+      speaker: "Eraser",
+      text: lines
+        .slice(0, splitIdx)
+        .map((l) => l.text)
+        .join(" ")
+        .trim(),
+    },
+    {
+      speaker: "Pencil",
+      text: lines
+        .slice(splitIdx)
+        .map((l) => l.text)
+        .join(" ")
+        .trim(),
+    },
+  ];
 }
 
 async function startServer() {
@@ -132,6 +194,15 @@ async function startServer() {
           ? learningExpressions.map((e) => `"${e}"`).join(", ")
           : "natural everyday English";
 
+      const speakerLockInstruction =
+        body.beatNumber === 1
+          ? "Speaker LOCK: Beat 1 MUST have ONLY ONE speaker: Eraser (ERASER_VOICE). Pencil must remain silent."
+          : body.beatNumber === 2
+          ? "Speaker LOCK: Beat 2 MUST have ONLY ONE speaker: Pencil (PENCIL_VOICE). Eraser must remain silent."
+          : body.beatNumber === 3
+          ? "Speaker LOCK: Beat 3 MUST have ONLY ONE speaker: Eraser (ERASER_VOICE). Pencil must remain silent."
+          : "Speaker LOCK: Beat 4 MUST have TWO sequential lines: first Eraser (ERASER_VOICE), then Pencil (PENCIL_VOICE).";
+
       const prompt = `You are a friendly 3D animation director, sound designer, and short-film writer creating a 30-second minimalist 3D animated short film for Korean university students learning everyday English.
 
 Story Context:
@@ -149,11 +220,12 @@ ${body.otherBeatsSummary || "4-beat 30s story: Beat 1 Hook (0-7s), Beat 2 Proble
 Task:
 Regenerate ONLY Beat ${body.beatNumber}: ${body.beatTitle} (${body.startSec}–${body.endSec} seconds).
 Requirements:
-1. Strictly preserve the original storyline, realistic stationery physics, and character design rules (vivid yellow hexagonal pencil #F5C518 and cobalt-blue rectangular eraser #2449D8, ONLY two small expressive eyes each, NO arms/hands/legs/feet/mouths/eyebrows/accessories).
-2. You MUST include the exact learning expression(s) ${requiredExprList} verbatim (exact spelling and wording) in the English dialogue lines.
-3. Keep the total spoken English words across all lines in this beat between ${minBeatWords} and ${maxBeatWords} words (aim for ~${targetWords} words) so the entire 4-beat film stays between 60 and 70 words.
-4. Keep each dialogue line natural, family-friendly, emotionally resonant, and clear for Korean university English learners.
-5. Provide a natural Korean translation matching the dialogue lines (with speaker prefix like 지우개: or 연필:), plus refined camera, lighting, background music (Track 1 for Beats 1–2, Track 2 for Beats 3–4), and paper/graphite/eraser sound effects.`;
+1. ${speakerLockInstruction}
+2. Strictly preserve the original storyline, realistic stationery physics, and character design rules (vivid yellow hexagonal pencil #F5C518 and cobalt-blue rectangular eraser #2449D8, ONLY two small expressive eyes each, NO arms/hands/legs/feet/mouths/eyebrows/accessories).
+3. You MUST include the exact learning expression(s) ${requiredExprList} verbatim (exact spelling and wording) in the English dialogue lines.
+4. Keep the total spoken English words across all lines in this beat between ${minBeatWords} and ${maxBeatWords} words (aim for ~${targetWords} words) so the entire 4-beat film stays between 60 and 70 words.
+5. Keep each dialogue line natural, family-friendly, emotionally resonant, and clear for Korean university English learners.
+6. Provide a natural Korean translation matching the dialogue lines (with speaker prefix like 지우개: or 연필:), plus refined camera, lighting, background music (Track 1 — Curiosity for Beats 1–2, Track 2 — Blooming for Beats 3–4), and paper/graphite/eraser sound effects.`;
 
       const withTimeout = <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> =>
         Promise.race([
@@ -279,7 +351,7 @@ Requirements:
         soundEffects?: string;
       };
 
-      const normalizedLines = (parsed.lines || [])
+      const rawNormalized = (parsed.lines || [])
         .filter((l) => l && typeof l.text === "string" && l.text.trim().length > 0)
         .map((l) => ({
           speaker: l.speaker?.toLowerCase().includes("eraser")
@@ -288,10 +360,12 @@ Requirements:
           text: l.text.trim().replace(/^["']|["']$/g, ""),
         }));
 
-      if (normalizedLines.length === 0) {
+      if (rawNormalized.length === 0) {
         res.status(502).json({ error: "Model returned no dialogue lines." });
         return;
       }
+
+      const normalizedLines = enforceBeatSpeakers(body.beatNumber, rawNormalized);
 
       res.json({
         sceneDescription: parsed.sceneDescription?.trim() || "",
@@ -313,13 +387,17 @@ Requirements:
     }
   });
 
-  const ttsQuotaBlockedUntil: Record<string, number> = {};
+  let ttsQuotaBlockedUntil = 0;
 
   app.post("/api/tts", async (req, res) => {
     try {
       const body = req.body as TtsBody;
       const cleanText = (body?.text ?? "").trim();
       const speaker = body?.speaker === "Eraser" ? "Eraser" : "Pencil";
+      const voiceId: "PENCIL_VOICE" | "ERASER_VOICE" =
+        body?.voiceId === "ERASER_VOICE" || speaker === "Eraser"
+          ? "ERASER_VOICE"
+          : "PENCIL_VOICE";
       const beatNumber = typeof body?.beatNumber === "number" ? body.beatNumber : 1;
 
       if (!cleanText) {
@@ -327,100 +405,89 @@ Requirements:
         return;
       }
 
-      const toneBucket =
-        speaker === "Eraser" ? (beatNumber >= 3 ? "soft" : "strict") : "pencil";
-      const cacheKey = `${speaker}::${toneBucket}::${cleanText}`;
+      const profile = LOCKED_VOICE_PROFILES[voiceId];
+      const emotionCue = profile.emotions[beatNumber] || profile.emotions[1];
+      const cacheKey = `v3::${FIXED_TTS_MODEL}::${voiceId}::${profile.voiceName}::${beatNumber}::${cleanText}`;
       const cached = ttsCache.get(cacheKey);
       if (cached) {
-        res.json({ audioBase64: cached, mimeType: "audio/wav" });
+        res.json({
+          audioBase64: cached,
+          mimeType: "audio/wav",
+          voiceId,
+          voiceName: profile.voiceName,
+          model: FIXED_TTS_MODEL,
+        });
+        return;
+      }
+
+      if (ttsQuotaBlockedUntil > Date.now()) {
+        res.json({
+          audioBase64: null,
+          fallback: true,
+          voiceId,
+          notice:
+            "Studio voice quota reached for today; using consistent two-voice browser speech.",
+        });
         return;
       }
 
       const ai = getGeminiClient(true);
+      const lockedStylePrompt = `${profile.baseIdentity} Emotional tone for this line: ${emotionCue}`;
 
-      // The Pencil: gentle, curious, creative voice (Zephyr)
-      // The Eraser: slightly strict & tidy early on, gradually warmer & understanding in Beats 3–4 (Charon)
-      const voiceName = speaker === "Pencil" ? "Zephyr" : "Charon";
-      const stylePrompt =
-        speaker === "Pencil"
-          ? "Gentle, curious, creative, and expressive voice speaking clearly at a natural pace for English learners"
-          : beatNumber >= 3
-          ? "Warm, gentle, appreciative, and understanding voice full of wonder and sincerity, speaking clearly at a natural pace for English learners"
-          : "Slightly strict, tidy, and mildly annoyed yet warm voice speaking clearly at a natural pace for English learners";
-
-      const candidateModels = ["gemini-3.8-flash-lite-tts", "gemini-3.8-flash-tts"];
-      const now = Date.now();
       let base64Audio: string | undefined;
-      let sawQuota = false;
-      let lastNonQuotaErr: unknown = null;
-
-      for (const modelName of candidateModels) {
-        if ((ttsQuotaBlockedUntil[modelName] ?? 0) > now) {
-          sawQuota = true;
-          continue;
-        }
-        try {
-          const response = await withRetry(() =>
-            ai.models.generateContent({
-              model: modelName,
-              contents: [
-                {
-                  role: "user",
-                  parts: [
-                    {
-                      text: cleanText,
-                      speechMetadata: {
-                        style: stylePrompt,
-                      },
+      try {
+        const response = await withRetry(() =>
+          ai.models.generateContent({
+            model: FIXED_TTS_MODEL,
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  {
+                    text: cleanText,
+                    speechMetadata: {
+                      style: lockedStylePrompt,
                     },
-                  ],
-                },
-              ],
-              config: {
-                responseModalities: ["AUDIO"],
-                speechConfig: {
-                  voiceConfig: {
-                    prebuiltVoiceConfig: { voiceName },
                   },
+                ],
+              },
+            ],
+            config: {
+              responseModalities: ["AUDIO"],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: { voiceName: profile.voiceName },
                 },
               },
-            })
-          );
-          base64Audio =
-            response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-          if (base64Audio) {
-            break;
-          }
-        } catch (modelErr: unknown) {
-          const msg =
-            modelErr instanceof Error ? modelErr.message : String(modelErr);
-          if (/429|RESOURCE_EXHAUSTED|Quota exceeded/i.test(msg)) {
-            sawQuota = true;
-            ttsQuotaBlockedUntil[modelName] = Date.now() + 15 * 60 * 1000;
-            continue;
-          }
-          lastNonQuotaErr = modelErr;
-        }
-      }
-
-      if (!base64Audio) {
-        if (sawQuota && !lastNonQuotaErr) {
+            },
+          })
+        );
+        base64Audio =
+          response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      } catch (modelErr: unknown) {
+        const msg =
+          modelErr instanceof Error ? modelErr.message : String(modelErr);
+        if (/429|RESOURCE_EXHAUSTED|Quota exceeded/i.test(msg)) {
+          ttsQuotaBlockedUntil = Date.now() + 15 * 60 * 1000;
           res.json({
             audioBase64: null,
             fallback: true,
+            voiceId,
             notice:
-              "Studio voice quota reached for today; using browser English voices.",
+              "Studio voice quota reached for today; using consistent two-voice browser speech.",
           });
           return;
         }
-        const fallbackMsg =
-          lastNonQuotaErr instanceof Error
-            ? lastNonQuotaErr.message
-            : "Studio voice temporarily unavailable; using browser English voices.";
+        throw modelErr;
+      }
+
+      if (!base64Audio) {
         res.json({
           audioBase64: null,
           fallback: true,
-          notice: fallbackMsg,
+          voiceId,
+          notice:
+            "Studio voice temporarily unavailable; using consistent two-voice browser speech.",
         });
         return;
       }
@@ -431,14 +498,20 @@ Requirements:
       }
       ttsCache.set(cacheKey, base64Audio);
 
-      res.json({ audioBase64: base64Audio, mimeType: "audio/wav" });
+      res.json({
+        audioBase64: base64Audio,
+        mimeType: "audio/wav",
+        voiceId,
+        voiceName: profile.voiceName,
+        model: FIXED_TTS_MODEL,
+      });
     } catch (err: unknown) {
       const rawMsg = err instanceof Error ? err.message : "Speech synthesis failed.";
       res.json({
         audioBase64: null,
         fallback: true,
         notice: /429|RESOURCE_EXHAUSTED|Quota exceeded/i.test(rawMsg)
-          ? "Studio voice quota reached for today; using browser English voices."
+          ? "Studio voice quota reached for today; using consistent two-voice browser speech."
           : rawMsg,
       });
     }

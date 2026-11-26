@@ -1,5 +1,10 @@
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
-import { FILM_CREDIT_TEXT, PALETTE, splitSubtitleSegments } from "../data/defaults";
+import {
+  FILM_CREDIT_TEXT,
+  PALETTE,
+  getVoiceIdForSpeaker,
+  splitSubtitleSegments,
+} from "../data/defaults";
 import type {
   AnimationStyle,
   Beat,
@@ -29,10 +34,11 @@ export async function synthesizeLineAudio(
   beatNumber: number,
   audioCtx: AudioContext
 ): Promise<{ buffer: AudioBuffer | null; fallbackNotice?: string }> {
+  const voiceId = getVoiceIdForSpeaker(speaker);
   const res = await fetch("/api/tts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, speaker, beatNumber }),
+    body: JSON.stringify({ text, speaker, voiceId, beatNumber }),
   });
 
   if (!res.ok) {
@@ -116,10 +122,10 @@ async function buildBeatTimedLines(
     });
   }
 
-  const padStart = beat.number === 1 ? 1.35 : 0.38;
-  const padEnd = beat.number === 4 ? 0.75 : 0.32;
+  const padStart = beat.number === 1 ? 1.35 : 0.36;
+  const padEnd = beat.number === 4 ? 0.65 : 0.30;
   const availableWindow = Math.max(2, beat.durationSec - padStart - padEnd);
-  const gapBetweenLines = beat.lines.length > 1 ? 0.32 : 0;
+  const gapBetweenLines = beat.lines.length > 1 ? 0.42 : 0;
   const totalGaps = gapBetweenLines * Math.max(0, beat.lines.length - 1);
   const totalRawAudio = decodedBuffers.reduce((acc, d) => acc + d.estDuration, 0);
 
@@ -135,12 +141,13 @@ async function buildBeatTimedLines(
     const raw = decodedBuffers[idx];
     const dur = Math.max(0.8, raw.estDuration * scaleFactor);
     const startSec = Number(cursor.toFixed(3));
-    const endSec = Number(Math.min(beat.endSec - 0.15, cursor + dur).toFixed(3));
+    const endSec = Number(Math.min(beat.endSec - 0.12, cursor + dur).toFixed(3));
 
     timedLines.push({
       lineId: line.id,
       beatNumber: beat.number,
       speaker: line.speaker,
+      voiceId: getVoiceIdForSpeaker(line.speaker),
       text: line.text,
       koreanTranslation: koreanChunks[idx] || beat.koreanMeaning,
       startSec,
@@ -183,7 +190,7 @@ export async function buildVideoPackage(
   for (let i = 0; i < beats.length; i++) {
     const beat = beats[i];
     onProgress?.(
-      `Synthesizing voices for Beat ${beat.number}: ${beat.title}...`,
+      `Synthesizing ${beat.lines.map((l) => l.speaker).join(" & ")} voice for Beat ${beat.number}...`,
       (i / beats.length) * 0.78
     );
 
@@ -194,6 +201,15 @@ export async function buildVideoPackage(
     }
     allTimedLines.push(...result.timedLines);
   }
+
+  // Strictly guarantee ONE uniform voice mode across all 4 beats (never mix Gemini + browser TTS)
+  const finalTimedLines = ttsFailed
+    ? allTimedLines.map((l) => ({
+        ...l,
+        audioBuffer: null,
+        sourceMode: "silent-timed" as const,
+      }))
+    : allTimedLines;
 
   onProgress?.("Composing Track 1 & Track 2 with 15s crossfade & foley...", 0.86);
   const musicPack = existingMusic
@@ -211,7 +227,7 @@ export async function buildVideoPackage(
     generatedAt: Date.now(),
     style,
     mode: ttsFailed ? "3d-slideshow" : "3d-animation",
-    timedLines: allTimedLines,
+    timedLines: finalTimedLines,
     musicBuffer: musicPack.combinedBuffer,
     track1Buffer: musicPack.track1Buffer,
     track2Buffer: musicPack.track2Buffer,
@@ -238,19 +254,34 @@ export async function rebuildSingleBeatInPackage(
       .webkitAudioContext;
   const audioCtx = new AudioCtx();
   try {
-    const result = await buildBeatTimedLines(updatedBeat, audioCtx, true);
+    const packageUsesGemini = pkg.timedLines.every(
+      (l) => l.sourceMode === "gemini-tts"
+    );
+    const result = await buildBeatTimedLines(
+      updatedBeat,
+      audioCtx,
+      packageUsesGemini
+    );
     const mergedLines = [
       ...pkg.timedLines.filter((l) => l.beatNumber !== updatedBeat.number),
       ...result.timedLines,
     ].sort((a, b) => a.startSec - b.startSec);
 
-    const hasAnySilent = mergedLines.some((l) => l.sourceMode === "silent-timed");
+    const anySilent = mergedLines.some((l) => l.sourceMode === "silent-timed");
+    const unifiedLines = anySilent
+      ? mergedLines.map((l) => ({
+          ...l,
+          audioBuffer: null,
+          sourceMode: "silent-timed" as const,
+        }))
+      : mergedLines;
 
     return {
       ...pkg,
       generatedAt: Date.now(),
-      timedLines: mergedLines,
-      ttsErrorNotice: result.ttsError ?? (hasAnySilent ? pkg.ttsErrorNotice : undefined),
+      timedLines: unifiedLines,
+      ttsErrorNotice:
+        result.ttsError ?? (anySilent ? pkg.ttsErrorNotice : undefined),
     };
   } finally {
     await audioCtx.close().catch(() => undefined);
@@ -294,7 +325,7 @@ async function renderMixedAudioBuffer(
 
       const slotDur = Math.max(0.5, line.endSec - line.startSec);
       if (line.audioBuffer.duration > slotDur) {
-        src.playbackRate.value = Math.min(1.25, line.audioBuffer.duration / slotDur);
+        src.playbackRate.value = Math.min(1.45, line.audioBuffer.duration / slotDur);
       }
 
       const gain = offline.createGain();
@@ -302,6 +333,7 @@ async function renderMixedAudioBuffer(
       src.connect(gain);
       gain.connect(offline.destination);
       src.start(line.startSec);
+      src.stop(line.endSec);
     }
   }
 

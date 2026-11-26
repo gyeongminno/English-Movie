@@ -1,4 +1,11 @@
-import type { Beat, DialogueLine, ExpressionItem, SceneSettings } from "../types";
+import type {
+  Beat,
+  DialogueLine,
+  ExpressionItem,
+  SceneSettings,
+  SpeakerRole,
+  VoiceId,
+} from "../types";
 
 export const PALETTE = {
   pencilYellow: "#F5C518",
@@ -6,6 +13,33 @@ export const PALETTE = {
   darkGraphite: "#242424",
   warmIvory: "#FAF7EF",
 } as const;
+
+export const VOICE_REGISTRY: Record<
+  SpeakerRole,
+  {
+    voiceId: VoiceId;
+    presetName: string;
+    register: string;
+    characterLabel: string;
+  }
+> = {
+  Pencil: {
+    voiceId: "PENCIL_VOICE",
+    presetName: "Zephyr",
+    register: "Medium-high, bright, gentle, warm, youthful",
+    characterLabel: "Yellow Pencil",
+  },
+  Eraser: {
+    voiceId: "ERASER_VOICE",
+    presetName: "Charon",
+    register: "Medium-low, calm, clear, composed",
+    characterLabel: "Cobalt-Blue Eraser",
+  },
+} as const;
+
+export function getVoiceIdForSpeaker(speaker: SpeakerRole): VoiceId {
+  return speaker === "Eraser" ? "ERASER_VOICE" : "PENCIL_VOICE";
+}
 
 export const DEFAULT_EXPRESSIONS: ExpressionItem[] = [
   {

@@ -7,7 +7,11 @@ import {
   Volume2,
 } from "lucide-react";
 import { useState } from "react";
-import { countTotalScriptWords, FILM_CREDIT_TEXT } from "../data/defaults";
+import {
+  countTotalScriptWords,
+  FILM_CREDIT_TEXT,
+  getVoiceIdForSpeaker,
+} from "../data/defaults";
 import type {
   Beat,
   ExpressionItem,
@@ -137,7 +141,14 @@ export function FinalScreen({
         koreanMeaning: data.koreanMeaning || beat.koreanMeaning,
         lines: data.lines.map((l, i) => ({
           id: `${beat.id}-final-regen-${Date.now()}-${i}`,
-          speaker: l.speaker === "Eraser" ? "Eraser" : "Pencil",
+          speaker:
+            beat.number === 1 || beat.number === 3
+              ? "Eraser"
+              : beat.number === 2
+              ? "Pencil"
+              : i === 0
+              ? "Eraser"
+              : "Pencil",
           text: l.text,
         })),
       };
@@ -199,18 +210,27 @@ export function FinalScreen({
 
   const handleSpeakExpression = async (item: ExpressionItem) => {
     setSpeakingExprId(item.id);
+    const matchingLine = beats
+      .flatMap((b) => b.lines)
+      .find((l) =>
+        l.text.toLowerCase().includes(item.expression.trim().toLowerCase())
+      );
+    const speaker: SpeakerRole = matchingLine?.speaker ?? "Pencil";
+    const voiceId = getVoiceIdForSpeaker(speaker);
+
     try {
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text: item.expression,
-          speaker: "Pencil",
-          beatNumber: 4,
+          speaker,
+          voiceId,
+          beatNumber: speaker === "Eraser" ? 3 : 4,
         }),
       });
       if (res.ok) {
-        const data = (await res.json()) as { audioBase64?: string };
+        const data = (await res.json()) as { audioBase64?: string | null };
         if (data.audioBase64) {
           const audio = new Audio(`data:audio/wav;base64,${data.audioBase64}`);
           audio.onended = () => setSpeakingExprId(null);
@@ -224,9 +244,21 @@ export function FinalScreen({
 
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
+      const enVoices = window.speechSynthesis
+        .getVoices()
+        .filter((v) => v.lang.toLowerCase().startsWith("en"));
+      const pencilVoice =
+        enVoices.find((v) => v.lang === "en-US") || enVoices[0] || null;
+      const eraserVoice =
+        enVoices.find(
+          (v) => v.lang === "en-US" && pencilVoice && v.name !== pencilVoice.name
+        ) || pencilVoice;
       const utter = new SpeechSynthesisUtterance(item.expression);
       utter.lang = "en-US";
-      utter.rate = 0.9;
+      if (speaker === "Pencil" && pencilVoice) utter.voice = pencilVoice;
+      if (speaker === "Eraser" && eraserVoice) utter.voice = eraserVoice;
+      utter.rate = speaker === "Pencil" ? 0.96 : 0.92;
+      utter.pitch = speaker === "Pencil" ? 1.15 : 0.85;
       utter.onend = () => setSpeakingExprId(null);
       window.speechSynthesis.speak(utter);
     } else {
