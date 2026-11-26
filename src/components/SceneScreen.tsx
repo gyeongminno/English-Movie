@@ -92,22 +92,23 @@ export function SceneScreen({
     <section className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div className="space-y-1.5">
-          <p className="text-sm font-medium text-[#75726B]">
+          <p className="text-sm font-medium text-[#6B6862]">
             Step 2 of 5 · 3D Art Direction & World
           </p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#484744] text-balance">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#242424] text-balance">
             Scene, Characters & Style
           </h1>
-          <p className="text-sm sm:text-base text-[#66645F] max-w-2xl">
-            Configure the sculptural 3D world, ceramic-like matte characters,
-            and contemporary motion-graphics aesthetic.
+          <p className="text-sm sm:text-base text-[#524F4A] max-w-2xl">
+            Customize the warm ivory drawing paper world, the vivid yellow
+            hexagonal pencil, the cobalt-blue matte rubber eraser, and your
+            visual style.
           </p>
         </div>
 
         <button
           type="button"
           onClick={onResetDefaults}
-          className="min-h-[44px] px-4 py-2 rounded-xl border border-[#D8D2C7] bg-white/85 text-sm font-medium text-[#5C5A55] hover:bg-[#EAE4D8] inline-flex items-center gap-2 self-start sm:self-auto cursor-pointer"
+          className="min-h-[44px] px-4 py-2 rounded-xl border border-[#DCD7CE] bg-white text-sm font-medium text-[#3A3936] hover:bg-[#F2EEE4] inline-flex items-center gap-2 self-start sm:self-auto cursor-pointer"
         >
           <RotateCcw className="w-4 h-4" />
           <span>Reset Scene Defaults</span>
@@ -117,17 +118,17 @@ export function SceneScreen({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left: Live 3D Art Direction Viewport + Palette + 6 Styles */}
         <div className="lg:col-span-5 space-y-5 lg:sticky lg:top-20">
-          <div className="bg-white/85 border border-[#D8D2C7] rounded-2xl p-4 sm:p-5 space-y-4">
+          <div className="bg-white border border-[#DCD7CE] rounded-2xl p-4 sm:p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="font-display text-lg font-semibold text-[#484744]">
+              <h2 className="font-display text-lg font-semibold text-[#242424]">
                 Live 3D Stage Preview
               </h2>
-              <span className="text-xs font-medium text-[#75726B]">
+              <span className="text-xs font-medium text-[#6B6862]">
                 16:9 · {scene.style}
               </span>
             </div>
 
-            <div className="rounded-xl overflow-hidden border border-[#D4CEC2] aspect-video bg-[#F2EEE6]">
+            <div className="rounded-xl overflow-hidden border border-[#D4CFC5] aspect-video bg-[#FAF7EF]">
               <canvas
                 ref={previewCanvasRef}
                 width={CANVAS_WIDTH}
@@ -138,23 +139,22 @@ export function SceneScreen({
 
             {/* Film Color Palette */}
             <div className="space-y-1.5 pt-1">
-              <p className="text-xs font-semibold text-[#66645F]">
-                Matte Ceramic Palette
+              <p className="text-xs font-semibold text-[#524F4A]">
+                Studio Color Palette
               </p>
-              <div className="grid grid-cols-5 gap-1.5 text-[11px] text-[#5C5A55]">
+              <div className="grid grid-cols-4 gap-2 text-[11px] text-[#3A3936]">
                 {[
-                  { label: "Ivory", hex: PALETTE.warmIvory },
-                  { label: "Apricot", hex: PALETTE.apricotOrange },
-                  { label: "Sage", hex: PALETTE.sageGreen },
-                  { label: "Gray", hex: PALETTE.warmGray },
-                  { label: "Charcoal", hex: PALETTE.softCharcoal },
+                  { label: "Pencil Yellow", hex: PALETTE.pencilYellow },
+                  { label: "Eraser Blue", hex: PALETTE.eraserBlue },
+                  { label: "Dark Graphite", hex: PALETTE.darkGraphite },
+                  { label: "Warm Ivory", hex: PALETTE.warmIvory },
                 ].map((sw) => (
                   <div key={sw.hex} className="space-y-1 text-center">
                     <div
-                      className="h-6 rounded-md border border-[#C5C0B8]/70"
+                      className="h-7 rounded-lg border border-[#B8B5AF]/70"
                       style={{ backgroundColor: sw.hex }}
                     />
-                    <span className="block truncate">{sw.label}</span>
+                    <span className="block truncate font-medium">{sw.label}</span>
                   </div>
                 ))}
               </div>
@@ -162,7 +162,7 @@ export function SceneScreen({
 
             {/* 6-Option Style Menu */}
             <div className="space-y-2 pt-1">
-              <label className="block text-sm font-semibold text-[#484744]">
+              <label className="block text-sm font-semibold text-[#242424]">
                 Visual Style
               </label>
               <div className="grid grid-cols-2 gap-2">
@@ -175,8 +175,8 @@ export function SceneScreen({
                       onClick={() => updateField("style", styleOption)}
                       className={`min-h-[44px] px-3 py-2 rounded-xl text-xs sm:text-sm font-medium border text-left transition-all cursor-pointer ${
                         selected
-                          ? "bg-[#F7ECE3] border-[#D99A70] text-[#353431] font-semibold"
-                          : "bg-[#FAF8F4] border-[#D8D2C7] text-[#5C5A55] hover:bg-[#EFEAE0]"
+                          ? "bg-[#FFFBEB] border-[#F5C518] text-[#242424] font-semibold ring-1 ring-[#F5C518]"
+                          : "bg-[#FAF7EF] border-[#DCD7CE] text-[#524F4A] hover:bg-[#F2EEE4]"
                       }`}
                     >
                       {styleOption}
@@ -189,12 +189,12 @@ export function SceneScreen({
         </div>
 
         {/* Right: Editable Scene & Character Specifications */}
-        <div className="lg:col-span-7 bg-white/85 border border-[#D8D2C7] rounded-2xl p-5 sm:p-6 space-y-5">
+        <div className="lg:col-span-7 bg-white border border-[#DCD7CE] rounded-2xl p-5 sm:p-6 space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label
                 htmlFor="scene-title"
-                className="block text-sm font-semibold text-[#484744]"
+                className="block text-sm font-semibold text-[#242424]"
               >
                 Title
               </label>
@@ -203,23 +203,23 @@ export function SceneScreen({
                 type="text"
                 value={scene.title}
                 onChange={(e) => updateField("title", e.target.value)}
-                className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-[#D4CEC2] bg-[#FAF8F4] text-base font-medium text-[#484744] focus:outline-none focus:border-[#D99A70]"
+                className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-[#D4CFC5] bg-[#FAF7EF] text-base font-medium text-[#242424] focus:outline-none focus:border-[#2449D8]"
               />
             </div>
 
             <div className="space-y-1.5">
               <label
                 htmlFor="scene-theme"
-                className="block text-sm font-semibold text-[#484744]"
+                className="block text-sm font-semibold text-[#242424]"
               >
-                Theme
+                Core Message
               </label>
               <input
                 id="scene-theme"
                 type="text"
                 value={scene.theme}
                 onChange={(e) => updateField("theme", e.target.value)}
-                className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-[#D4CEC2] bg-[#FAF8F4] text-base text-[#484744] focus:outline-none focus:border-[#D99A70]"
+                className="w-full min-h-[44px] px-3.5 py-2 rounded-xl border border-[#D4CFC5] bg-[#FAF7EF] text-base text-[#242424] focus:outline-none focus:border-[#2449D8]"
               />
             </div>
           </div>
@@ -227,7 +227,7 @@ export function SceneScreen({
           <div className="space-y-1.5">
             <label
               htmlFor="scene-place"
-              className="block text-sm font-semibold text-[#484744]"
+              className="block text-sm font-semibold text-[#242424]"
             >
               Place
             </label>
@@ -236,42 +236,42 @@ export function SceneScreen({
               rows={2}
               value={scene.place}
               onChange={(e) => updateField("place", e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-[#D4CEC2] bg-[#FAF8F4] text-base text-[#484744] leading-relaxed focus:outline-none focus:border-[#D99A70]"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[#D4CFC5] bg-[#FAF7EF] text-base text-[#242424] leading-relaxed focus:outline-none focus:border-[#2449D8]"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label
-                htmlFor="char-square"
-                className="block text-sm font-semibold text-[#484744]"
+                htmlFor="char-pencil"
+                className="block text-sm font-semibold text-[#242424]"
               >
-                Character: Square (3D Cube)
+                Character 1: The Pencil
               </label>
               <textarea
-                id="char-square"
-                rows={4}
-                value={scene.squareCharacter}
-                onChange={(e) => updateField("squareCharacter", e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-[#D4CEC2] bg-[#FAF8F4] text-sm sm:text-base text-[#484744] leading-relaxed focus:outline-none focus:border-[#D99A70]"
+                id="char-pencil"
+                rows={5}
+                value={scene.pencilCharacter}
+                onChange={(e) => updateField("pencilCharacter", e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#D4CFC5] bg-[#FAF7EF] text-sm sm:text-base text-[#242424] leading-relaxed focus:outline-none focus:border-[#2449D8]"
               />
             </div>
 
             <div className="space-y-1.5">
               <label
-                htmlFor="char-circles"
-                className="block text-sm font-semibold text-[#484744]"
+                htmlFor="char-eraser"
+                className="block text-sm font-semibold text-[#242424]"
               >
-                Characters: Circles (3D Spheres)
+                Character 2: The Eraser
               </label>
               <textarea
-                id="char-circles"
-                rows={4}
-                value={scene.circlesCharacter}
+                id="char-eraser"
+                rows={5}
+                value={scene.eraserCharacter}
                 onChange={(e) =>
-                  updateField("circlesCharacter", e.target.value)
+                  updateField("eraserCharacter", e.target.value)
                 }
-                className="w-full px-3.5 py-2.5 rounded-xl border border-[#D4CEC2] bg-[#FAF8F4] text-sm sm:text-base text-[#484744] leading-relaxed focus:outline-none focus:border-[#D99A70]"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-[#D4CFC5] bg-[#FAF7EF] text-sm sm:text-base text-[#242424] leading-relaxed focus:outline-none focus:border-[#2449D8]"
               />
             </div>
           </div>
@@ -279,7 +279,7 @@ export function SceneScreen({
           <div className="space-y-1.5">
             <label
               htmlFor="scene-situation"
-              className="block text-sm font-semibold text-[#484744]"
+              className="block text-sm font-semibold text-[#242424]"
             >
               Situation
             </label>
@@ -288,7 +288,7 @@ export function SceneScreen({
               rows={4}
               value={scene.situation}
               onChange={(e) => updateField("situation", e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-[#D4CEC2] bg-[#FAF8F4] text-sm sm:text-base text-[#484744] leading-relaxed focus:outline-none focus:border-[#D99A70]"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-[#D4CFC5] bg-[#FAF7EF] text-sm sm:text-base text-[#242424] leading-relaxed focus:outline-none focus:border-[#2449D8]"
             />
           </div>
         </div>
@@ -298,7 +298,7 @@ export function SceneScreen({
         <button
           type="button"
           onClick={onContinue}
-          className="w-full sm:w-auto min-h-[50px] px-7 py-3 rounded-xl bg-[#D99A70] text-white text-base font-semibold hover:bg-[#C6865B] active:scale-[0.98] transition-all inline-flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+          className="w-full sm:w-auto min-h-[50px] px-7 py-3 rounded-xl bg-[#2449D8] text-white text-base font-semibold hover:bg-[#1D3CB8] active:scale-[0.98] transition-all inline-flex items-center justify-center gap-2 cursor-pointer shadow-xs"
         >
           <span>Continue to Storyboard & Direction</span>
           <ArrowRight className="w-5 h-5" />

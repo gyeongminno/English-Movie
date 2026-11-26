@@ -1,6 +1,12 @@
 import { ArrayBufferTarget, Muxer } from "mp4-muxer";
 import { FILM_CREDIT_TEXT, PALETTE, splitSubtitleSegments } from "../data/defaults";
-import type { AnimationStyle, Beat, GeneratedVideoPackage, TimedLine } from "../types";
+import type {
+  AnimationStyle,
+  Beat,
+  GeneratedVideoPackage,
+  SpeakerRole,
+  TimedLine,
+} from "../types";
 import { renderFrame as render2DFallbackFrame } from "./canvasRenderer";
 import {
   buildDuckingEnvelope,
@@ -19,33 +25,48 @@ function decodeBase64ToArrayBuffer(base64: string): ArrayBuffer {
 
 export async function synthesizeLineAudio(
   text: string,
-  speaker: "Square" | "Circle",
+  speaker: SpeakerRole,
+  beatNumber: number,
   audioCtx: AudioContext
-): Promise<AudioBuffer> {
+): Promise<{ buffer: AudioBuffer | null; fallbackNotice?: string }> {
   const res = await fetch("/api/tts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, speaker }),
+    body: JSON.stringify({ text, speaker, beatNumber }),
   });
 
   if (!res.ok) {
     const errBody = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(errBody.error || `TTS request failed (${res.status})`);
+    return {
+      buffer: null,
+      fallbackNotice:
+        errBody.error ||
+        "Studio voice temporarily unavailable; using browser English voices.",
+    };
   }
 
-  const data = (await res.json()) as { audioBase64?: string };
+  const data = (await res.json()) as {
+    audioBase64?: string | null;
+    fallback?: boolean;
+    notice?: string;
+  };
   if (!data.audioBase64) {
-    throw new Error("No audio data returned from speech service.");
+    return {
+      buffer: null,
+      fallbackNotice:
+        data.notice ||
+        "Studio voice temporarily unavailable; using browser English voices.",
+    };
   }
 
   const wavBuffer = decodeBase64ToArrayBuffer(data.audioBase64);
-  return await audioCtx.decodeAudioData(wavBuffer);
+  return { buffer: await audioCtx.decodeAudioData(wavBuffer) };
 }
 
 function splitKoreanTranslations(beat: Beat): string[] {
   const rawLines = beat.koreanMeaning
     .split("\n")
-    .map((s) => s.replace(/^(동그라미|네모|Square|Circle)\s*:\s*/i, "").trim())
+    .map((s) => s.replace(/^(지우개|연필|점|Pencil|Eraser|Dot)\s*:\s*/i, "").trim())
     .filter(Boolean);
   if (rawLines.length === beat.lines.length) {
     return rawLines;
@@ -67,7 +88,17 @@ async function buildBeatTimedLines(
     let buffer: AudioBuffer | null = null;
     if (!ttsBroken) {
       try {
-        buffer = await synthesizeLineAudio(line.text, line.speaker, audioCtx);
+        const res = await synthesizeLineAudio(
+          line.text,
+          line.speaker,
+          beat.number,
+          audioCtx
+        );
+        buffer = res.buffer;
+        if (!buffer && res.fallbackNotice) {
+          ttsBroken = true;
+          ttsError = res.fallbackNotice;
+        }
       } catch (err) {
         ttsBroken = true;
         ttsError =
@@ -85,8 +116,8 @@ async function buildBeatTimedLines(
     });
   }
 
-  const padStart = beat.number === 1 ? 0.45 : 0.35;
-  const padEnd = beat.number === 4 ? 0.85 : 0.35;
+  const padStart = beat.number === 1 ? 1.35 : 0.38;
+  const padEnd = beat.number === 4 ? 0.75 : 0.32;
   const availableWindow = Math.max(2, beat.durationSec - padStart - padEnd);
   const gapBetweenLines = beat.lines.length > 1 ? 0.32 : 0;
   const totalGaps = gapBetweenLines * Math.max(0, beat.lines.length - 1);
@@ -125,15 +156,19 @@ async function buildBeatTimedLines(
 }
 
 /**
- * Generates English voices for all 4 beats + continuous 30s emotional instrumental score.
+ * Generates English voices for all 4 beats + 2 original crossfaded instrumental tracks (30s total).
  */
 export async function buildVideoPackage(
   beats: Beat[],
   style: AnimationStyle,
   onProgress?: (label: string, ratio: number) => void,
   musicSeed = 1,
-  existingMusicBuffer?: AudioBuffer,
-  existingMusicLabel?: string
+  existingMusic?: {
+    combinedBuffer: AudioBuffer;
+    track1Buffer: AudioBuffer;
+    track2Buffer: AudioBuffer;
+    label: string;
+  }
 ): Promise<GeneratedVideoPackage> {
   const AudioCtx =
     window.AudioContext ||
@@ -160,9 +195,14 @@ export async function buildVideoPackage(
     allTimedLines.push(...result.timedLines);
   }
 
-  onProgress?.("Composing continuous 30s instrumental soundtrack...", 0.85);
-  const musicBuffer =
-    existingMusicBuffer ?? (await generateOriginalSoundtrack(musicSeed, 48000));
+  onProgress?.("Composing Track 1 & Track 2 with 15s crossfade & foley...", 0.86);
+  const musicPack = existingMusic
+    ? {
+        combinedBuffer: existingMusic.combinedBuffer,
+        track1Buffer: existingMusic.track1Buffer,
+        track2Buffer: existingMusic.track2Buffer,
+      }
+    : await generateOriginalSoundtrack(musicSeed, 48000);
 
   await audioCtx.close().catch(() => undefined);
   onProgress?.("Ready!", 1);
@@ -172,10 +212,13 @@ export async function buildVideoPackage(
     style,
     mode: ttsFailed ? "3d-slideshow" : "3d-animation",
     timedLines: allTimedLines,
-    musicBuffer,
+    musicBuffer: musicPack.combinedBuffer,
+    track1Buffer: musicPack.track1Buffer,
+    track2Buffer: musicPack.track2Buffer,
     musicSeed,
     musicSourceLabel:
-      existingMusicLabel || `Original Instrumental Score #${musicSeed}`,
+      existingMusic?.label ||
+      `Original Two-Track Score #${musicSeed} (Track 1 + Track 2)`,
     totalDurationSec: 30,
     ttsErrorNotice,
   };
@@ -201,11 +244,13 @@ export async function rebuildSingleBeatInPackage(
       ...result.timedLines,
     ].sort((a, b) => a.startSec - b.startSec);
 
+    const hasAnySilent = mergedLines.some((l) => l.sourceMode === "silent-timed");
+
     return {
       ...pkg,
       generatedAt: Date.now(),
       timedLines: mergedLines,
-      ttsErrorNotice: result.ttsError ?? pkg.ttsErrorNotice,
+      ttsErrorNotice: result.ttsError ?? (hasAnySilent ? pkg.ttsErrorNotice : undefined),
     };
   } finally {
     await audioCtx.close().catch(() => undefined);
@@ -213,7 +258,7 @@ export async function rebuildSingleBeatInPackage(
 }
 
 /**
- * Renders the full 30.00-second mixed stereo track (voices + ducked continuous music + foley).
+ * Renders the full 30.00-second mixed stereo track (voices + ducked two-track music + foley).
  */
 async function renderMixedAudioBuffer(
   pkg: GeneratedVideoPackage,
@@ -224,7 +269,6 @@ async function renderMixedAudioBuffer(
   const totalSamples = 30 * sampleRate;
   const offline = new OfflineAudioContext(2, totalSamples, sampleRate);
 
-  // Continuous background music + automatic voice ducking
   if (musicVolume > 0.001) {
     const musicSrc = offline.createBufferSource();
     musicSrc.buffer = pkg.musicBuffer;
@@ -242,7 +286,6 @@ async function renderMixedAudioBuffer(
     musicSrc.stop(30);
   }
 
-  // English Voices
   if (voiceVolume > 0.001) {
     for (const line of pkg.timedLines) {
       if (!line.audioBuffer) continue;
@@ -268,7 +311,7 @@ async function renderMixedAudioBuffer(
 export function getActiveSubtitleAt(
   timeSec: number,
   timedLines: TimedLine[]
-): { lines: string[]; korean: string; speaker: "Square" | "Circle" } | null {
+): { lines: string[]; korean: string; speaker: SpeakerRole } | null {
   for (const line of timedLines) {
     if (timeSec >= line.startSec && timeSec <= line.endSec) {
       const segs = splitSubtitleSegments(line.text, line.startSec, line.endSec);
@@ -311,7 +354,7 @@ function drawBurnedSubtitlesAndCredit(
     ctx.font = `500 ${Math.round(21 * scale)}px 'Outfit', 'Noto Sans KR', sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillStyle = PALETTE.softCharcoal;
+    ctx.fillStyle = PALETTE.darkGraphite;
     ctx.fillText(FILM_CREDIT_TEXT, width / 2, Math.round(70 * scale));
     ctx.restore();
   }
@@ -335,10 +378,10 @@ function drawBurnedSubtitlesAndCredit(
     const y = baseY + i * lineHeight;
     ctx.lineJoin = "round";
     ctx.miterLimit = 2;
-    ctx.shadowColor = "rgba(25, 25, 24, 0.42)";
+    ctx.shadowColor = "rgba(23, 23, 23, 0.45)";
     ctx.shadowBlur = 8 * scale;
     ctx.shadowOffsetY = 2 * scale;
-    ctx.strokeStyle = "rgba(34, 34, 32, 0.92)";
+    ctx.strokeStyle = "rgba(23, 23, 23, 0.94)";
     ctx.lineWidth = 7 * scale;
     ctx.strokeText(text, width / 2, y);
 
@@ -352,14 +395,14 @@ function drawBurnedSubtitlesAndCredit(
 
 /**
  * Exports the 30.00-second 3D film as a downloadable MP4 file (1920x1080 when supported,
- * else 1280x720) with English voice, ducked instrumental music, foley SFX, and burned-in subtitles.
+ * else 1280x720) with English voices, two crossfaded instrumental tracks, foley SFX, and burned-in subtitles.
  */
 export async function exportCompletedMp4(
   pkg: GeneratedVideoPackage,
   options: { voiceVolume: number; musicVolume: number },
   onProgress?: (percent: number, stage: string) => void
 ): Promise<Blob> {
-  onProgress?.(4, "Mixing English voices, music & sound effects...");
+  onProgress?.(4, "Mixing English voices, two music tracks & sound effects...");
   const sampleRate = 48000;
   const mixedAudio = await renderMixedAudioBuffer(
     pkg,
@@ -368,7 +411,6 @@ export async function exportCompletedMp4(
     sampleRate
   );
 
-  // Determine supported resolution & codecs (prefer 1920x1080)
   const hasWebCodecs =
     typeof VideoEncoder !== "undefined" && typeof AudioEncoder !== "undefined";
 
@@ -453,7 +495,6 @@ export async function exportCompletedMp4(
     }
   }
 
-  // Prepare 3D WebGL stage (with automatic 2D canvas fallback if WebGL is unavailable)
   const glCanvas = document.createElement("canvas");
   glCanvas.width = exportWidth;
   glCanvas.height = exportHeight;
@@ -489,7 +530,7 @@ export async function exportCompletedMp4(
       compCtx.scale(exportWidth / 1280, exportHeight / 720);
       render2DFallbackFrame(compCtx, {
         timeSec,
-        style: pkg.style === "Artistic 3D animation" || pkg.style === "Minimalist 3D motion graphics" ? "2D animation" : pkg.style,
+        style: pkg.style,
         mode: pkg.mode === "3d-slideshow" ? "slideshow" : "animation",
         timedLines: pkg.timedLines,
         drawSubtitles: false,
@@ -589,7 +630,10 @@ export async function exportCompletedMp4(
 
         if (f % 15 === 0) {
           const pct = 15 + Math.round((f / totalFrames) * 80);
-          onProgress?.(pct, `Rendering ${exportWidth}×${exportHeight} frame ${f + 1}/${totalFrames}...`);
+          onProgress?.(
+            pct,
+            `Rendering ${exportWidth}×${exportHeight} frame ${f + 1}/${totalFrames}...`
+          );
           await new Promise((r) => setTimeout(r, 0));
         }
       }
@@ -603,7 +647,6 @@ export async function exportCompletedMp4(
       return new Blob([target.buffer], { type: "video/mp4" });
     }
 
-    // Fallback: MediaRecorder
     return await exportViaMediaRecorder(
       compositeCanvas,
       renderCompositeFrame,

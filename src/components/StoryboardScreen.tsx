@@ -11,6 +11,7 @@ import {
   RotateCcw,
   Sun,
   Trash2,
+  Volume2,
   X,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -19,7 +20,7 @@ import {
   countTotalScriptWords,
   splitSubtitleSegments,
 } from "../data/defaults";
-import type { Beat, ExpressionItem, SceneSettings } from "../types";
+import type { Beat, ExpressionItem, SceneSettings, SpeakerRole } from "../types";
 
 interface StoryboardScreenProps {
   beats: Beat[];
@@ -85,10 +86,10 @@ export function StoryboardScreen({
           type="button"
           onClick={() => setSelectedExpr(matched)}
           title="Click to inspect Korean meaning & source movie"
-          className={`inline font-bold px-1.5 py-0.5 rounded-md transition-colors cursor-pointer underline decoration-[#D99A70]/60 underline-offset-2 ${
+          className={`inline font-bold px-1.5 py-0.5 rounded-md transition-colors cursor-pointer underline decoration-[#2449D8]/60 underline-offset-2 ${
             isSelected
-              ? "bg-[#D99A70] text-white"
-              : "bg-[#F7E4D4] text-[#8F4D22] hover:bg-[#F1D4BA]"
+              ? "bg-[#2449D8] text-white"
+              : "bg-[#FFF3BF] text-[#242424] hover:bg-[#F5C518]/55"
           }`}
         >
           {part}
@@ -124,17 +125,19 @@ export function StoryboardScreen({
           currentCameraDirection: beat.cameraDirection,
           currentLightingDirection: beat.lightingDirection,
           currentMusicDirection: beat.musicDirection,
+          currentSoundEffects: beat.soundEffects,
         }),
       });
 
       const data = (await res.json()) as {
         error?: string;
         sceneDescription?: string;
-        lines?: Array<{ speaker: "Square" | "Circle"; text: string }>;
+        lines?: Array<{ speaker: SpeakerRole; text: string }>;
         koreanMeaning?: string;
         cameraDirection?: string;
         lightingDirection?: string;
         musicDirection?: string;
+        soundEffects?: string;
       };
 
       if (!res.ok) {
@@ -158,9 +161,11 @@ export function StoryboardScreen({
                   data.lightingDirection || b.lightingDirection,
                 musicDirection:
                   data.musicDirection || b.musicDirection,
+                soundEffects:
+                  data.soundEffects || b.soundEffects,
                 lines: data.lines!.map((l, i) => ({
                   id: `${b.id}-regen-${Date.now()}-${i}`,
-                  speaker: l.speaker,
+                  speaker: l.speaker === "Eraser" ? "Eraser" : "Pencil",
                   text: l.text,
                 })),
                 koreanMeaning: data.koreanMeaning || b.koreanMeaning,
@@ -188,16 +193,16 @@ export function StoryboardScreen({
     <section className="space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div className="space-y-1.5">
-          <p className="text-sm font-medium text-[#75726B]">
+          <p className="text-sm font-medium text-[#6B6862]">
             Step 3 of 5 · 4-Beat Script & Direction
           </p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#484744] text-balance">
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#242424] text-balance">
             Storyboard, Camera & Score
           </h1>
-          <p className="text-sm sm:text-base text-[#66645F] max-w-2xl">
-            Inspect or edit dialogue, camera framing, lighting mood, and
-            musical direction for each beat. Tap any highlighted expression for
-            its Korean meaning and movie.
+          <p className="text-sm sm:text-base text-[#524F4A] max-w-2xl">
+            Inspect or edit dialogue, camera framing, lighting, music cues, and
+            sound effects across all four beats. Tap any highlighted expression
+            to view its Korean meaning and source movie.
           </p>
         </div>
 
@@ -205,25 +210,25 @@ export function StoryboardScreen({
           <div
             className={`px-3.5 py-2 rounded-xl border text-sm font-medium inline-flex items-center gap-2 ${
               inWordRange
-                ? "bg-[#EBF0EA] border-[#A4B5A0] text-[#3F533B]"
-                : "bg-[#FAF0E8] border-[#D99A70] text-[#6E4427]"
+                ? "bg-[#F2F1ED] border-[#B8B5AF] text-[#242424]"
+                : "bg-[#FFFBEB] border-[#F5C518] text-[#242424]"
             }`}
           >
             {inWordRange ? (
-              <CheckCircle2 className="w-4 h-4 text-[#6F876B]" />
+              <CheckCircle2 className="w-4 h-4 text-[#2449D8]" />
             ) : (
-              <AlertCircle className="w-4 h-4 text-[#C27849]" />
+              <AlertCircle className="w-4 h-4 text-[#B68600]" />
             )}
             <span className="font-mono-tabular font-semibold">
               {totalWords} words
             </span>
-            <span className="text-xs opacity-85">(Target: 60–70)</span>
+            <span className="text-xs opacity-80">(Target: 60–70)</span>
           </div>
 
           <button
             type="button"
             onClick={onResetDefaults}
-            className="min-h-[42px] px-3.5 py-2 rounded-xl border border-[#D8D2C7] bg-white/85 text-sm font-medium text-[#5C5A55] hover:bg-[#EAE4D8] inline-flex items-center gap-1.5 cursor-pointer"
+            className="min-h-[42px] px-3.5 py-2 rounded-xl border border-[#DCD7CE] bg-white text-sm font-medium text-[#3A3936] hover:bg-[#F2EEE4] inline-flex items-center gap-1.5 cursor-pointer"
           >
             <RotateCcw className="w-4 h-4" />
             <span>Reset Script</span>
@@ -235,18 +240,18 @@ export function StoryboardScreen({
         <div
           role="region"
           aria-label="Selected expression details"
-          className="rounded-2xl border border-[#D99A70] bg-[#FBF4EE] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs"
+          className="rounded-2xl border border-[#2449D8] bg-[#EEF2FF] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs"
         >
           <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-2 text-xs text-[#7D5E44]">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-[#1D3CB8]">
               <span>Learning Expression</span>
               <span aria-hidden="true">·</span>
-              <span>Movie: {selectedExpr.movie || "Custom"}</span>
+              <span>Movie: {selectedExpr.movie || "To be confirmed"}</span>
             </div>
-            <p className="font-display text-xl font-bold text-[#484744]">
+            <p className="font-display text-xl font-bold text-[#242424]">
               “{selectedExpr.expression}”
             </p>
-            <p className="text-base font-medium text-[#6B533F]">
+            <p className="text-base font-medium text-[#3A3936]">
               한국어 뜻: {selectedExpr.koreanMeaning}
             </p>
           </div>
@@ -254,7 +259,7 @@ export function StoryboardScreen({
             type="button"
             onClick={() => setSelectedExpr(null)}
             aria-label="Close expression details"
-            className="min-h-[44px] min-w-[44px] self-start sm:self-center inline-flex items-center justify-center rounded-xl text-[#7D5E44] hover:bg-[#F3E2D4] cursor-pointer"
+            className="min-h-[44px] min-w-[44px] self-start sm:self-center inline-flex items-center justify-center rounded-xl text-[#1D3CB8] hover:bg-[#DCE4FF] cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -262,7 +267,7 @@ export function StoryboardScreen({
       )}
 
       {missingExpressions.length > 0 && (
-        <div className="rounded-2xl border border-[#D99A70] bg-[#FAF0E8] p-4 text-sm text-[#6E4427]">
+        <div className="rounded-2xl border border-[#F5C518] bg-[#FFFBEB] p-4 text-sm text-[#242424]">
           Missing from dialogue:{" "}
           <span className="font-semibold">
             {missingExpressions.map((e) => e.expression).join(", ")}
@@ -272,7 +277,7 @@ export function StoryboardScreen({
       )}
 
       {regenError && (
-        <div className="rounded-2xl border border-[#DC8A7E] bg-[#FDF0EE] p-4 text-sm text-[#7D2B20] flex items-center justify-between gap-3">
+        <div className="rounded-2xl border border-[#2449D8] bg-[#EEF2FF] p-4 text-sm text-[#1D3CB8] flex items-center justify-between gap-3">
           <span>{regenError}</span>
           <button
             type="button"
@@ -301,18 +306,24 @@ export function StoryboardScreen({
           return (
             <article
               key={beat.id}
-              className="bg-white/90 border border-[#D8D2C7] rounded-2xl p-5 sm:p-6 space-y-5 shadow-xs"
+              className="bg-white border border-[#DCD7CE] rounded-2xl p-5 sm:p-6 space-y-5 shadow-xs"
             >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#EAE4D8]">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-[#ECE7DD]">
                 <div className="space-y-0.5">
-                  <div className="flex items-center gap-2 text-xs text-[#75726B]">
+                  <div className="flex items-center gap-2 text-xs text-[#6B6862]">
                     <span className="font-mono-tabular font-semibold">
                       {beat.startSec}–{beat.endSec}s ({beat.durationSec}s)
                     </span>
                     <span aria-hidden="true">·</span>
                     <span className="font-mono-tabular">{beatWords} words</span>
+                    <span aria-hidden="true">·</span>
+                    <span>
+                      {beat.number <= 2
+                        ? "Background Music 1"
+                        : "Background Music 2"}
+                    </span>
                   </div>
-                  <h2 className="font-display text-xl font-bold text-[#484744]">
+                  <h2 className="font-display text-xl font-bold text-[#242424]">
                     Beat {beat.number}: {beat.title}
                   </h2>
                 </div>
@@ -325,8 +336,8 @@ export function StoryboardScreen({
                     }
                     className={`min-h-[44px] px-4 py-2 rounded-xl text-sm font-medium border inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
                       isEditing
-                        ? "bg-[#484744] text-white border-[#484744]"
-                        : "bg-[#FAF8F4] text-[#484744] border-[#D4CEC2] hover:bg-[#EFEAE0]"
+                        ? "bg-[#242424] text-white border-[#242424]"
+                        : "bg-[#FAF7EF] text-[#242424] border-[#D4CFC5] hover:bg-[#F2EEE4]"
                     }`}
                   >
                     <Edit3 className="w-4 h-4" />
@@ -337,7 +348,7 @@ export function StoryboardScreen({
                     type="button"
                     disabled={isRegenerating}
                     onClick={() => handleRegenerateBeat(beat)}
-                    className="min-h-[44px] px-4 py-2 rounded-xl bg-[#EBF0EA] border border-[#B8C7B4] text-[#3F533B] text-sm font-semibold hover:bg-[#DFEAE0] disabled:opacity-60 inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                    className="min-h-[44px] px-4 py-2 rounded-xl bg-[#EEF2FF] border border-[#C7D2FE] text-[#1D3CB8] text-sm font-semibold hover:bg-[#E0E7FF] disabled:opacity-60 inline-flex items-center gap-1.5 cursor-pointer transition-colors"
                   >
                     {isRegenerating ? (
                       <>
@@ -357,7 +368,7 @@ export function StoryboardScreen({
               {isEditing ? (
                 <div className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="block text-sm font-semibold text-[#484744]">
+                    <label className="block text-sm font-semibold text-[#242424]">
                       Scene Description
                     </label>
                     <textarea
@@ -369,13 +380,13 @@ export function StoryboardScreen({
                           sceneDescription: e.target.value,
                         }))
                       }
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#D4CEC2] bg-[#FAF8F4] text-sm sm:text-base text-[#484744]"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#D4CFC5] bg-[#FAF7EF] text-sm sm:text-base text-[#242424]"
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-semibold text-[#5C5A55]">
+                      <label className="block text-xs font-semibold text-[#524F4A]">
                         Camera Direction
                       </label>
                       <textarea
@@ -387,11 +398,11 @@ export function StoryboardScreen({
                             cameraDirection: e.target.value,
                           }))
                         }
-                        className="w-full px-3 py-2 rounded-xl border border-[#D4CEC2] bg-[#FAF8F4] text-xs sm:text-sm text-[#484744]"
+                        className="w-full px-3 py-2 rounded-xl border border-[#D4CFC5] bg-[#FAF7EF] text-xs sm:text-sm text-[#242424]"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-semibold text-[#5C5A55]">
+                      <label className="block text-xs font-semibold text-[#524F4A]">
                         Lighting Direction
                       </label>
                       <textarea
@@ -403,12 +414,12 @@ export function StoryboardScreen({
                             lightingDirection: e.target.value,
                           }))
                         }
-                        className="w-full px-3 py-2 rounded-xl border border-[#D4CEC2] bg-[#FAF8F4] text-xs sm:text-sm text-[#484744]"
+                        className="w-full px-3 py-2 rounded-xl border border-[#D4CFC5] bg-[#FAF7EF] text-xs sm:text-sm text-[#242424]"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-semibold text-[#5C5A55]">
-                        Background Music Direction
+                      <label className="block text-xs font-semibold text-[#524F4A]">
+                        Background Music
                       </label>
                       <textarea
                         rows={3}
@@ -419,14 +430,30 @@ export function StoryboardScreen({
                             musicDirection: e.target.value,
                           }))
                         }
-                        className="w-full px-3 py-2 rounded-xl border border-[#D4CEC2] bg-[#FAF8F4] text-xs sm:text-sm text-[#484744]"
+                        className="w-full px-3 py-2 rounded-xl border border-[#D4CFC5] bg-[#FAF7EF] text-xs sm:text-sm text-[#242424]"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-semibold text-[#524F4A]">
+                        Sound Effects
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={beat.soundEffects}
+                        onChange={(e) =>
+                          updateBeatField(beat.id, (b) => ({
+                            ...b,
+                            soundEffects: e.target.value,
+                          }))
+                        }
+                        className="w-full px-3 py-2 rounded-xl border border-[#D4CFC5] bg-[#FAF7EF] text-xs sm:text-sm text-[#242424]"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <label className="text-sm font-semibold text-[#484744]">
+                      <label className="text-sm font-semibold text-[#242424]">
                         English Dialogue Lines
                       </label>
                       <button
@@ -438,13 +465,13 @@ export function StoryboardScreen({
                               ...b.lines,
                               {
                                 id: `${b.id}-l-${Date.now()}`,
-                                speaker: "Square",
+                                speaker: "Pencil",
                                 text: "",
                               },
                             ],
                           }))
                         }
-                        className="min-h-[38px] px-3 py-1.5 rounded-lg border border-[#C5C0B8] text-xs font-semibold text-[#484744] hover:bg-[#EFEAE0] inline-flex items-center gap-1 cursor-pointer"
+                        className="min-h-[38px] px-3 py-1.5 rounded-lg border border-[#B8B5AF] text-xs font-semibold text-[#242424] hover:bg-[#F2EEE4] inline-flex items-center gap-1 cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />
                         <span>Add Line</span>
@@ -465,18 +492,16 @@ export function StoryboardScreen({
                                 l.id === line.id
                                   ? {
                                       ...l,
-                                      speaker: e.target.value as
-                                        | "Square"
-                                        | "Circle",
+                                      speaker: e.target.value as SpeakerRole,
                                     }
                                   : l
                               ),
                             }))
                           }
-                          className="min-h-[44px] px-3 py-2 rounded-xl border border-[#D4CEC2] bg-[#FAF8F4] text-sm font-semibold text-[#484744]"
+                          className="min-h-[44px] px-3 py-2 rounded-xl border border-[#D4CFC5] bg-[#FAF7EF] text-sm font-semibold text-[#242424]"
                         >
-                          <option value="Square">Square</option>
-                          <option value="Circle">Circle</option>
+                          <option value="Eraser">Eraser</option>
+                          <option value="Pencil">Pencil</option>
                         </select>
 
                         <input
@@ -492,7 +517,7 @@ export function StoryboardScreen({
                               ),
                             }))
                           }
-                          className="flex-1 min-h-[44px] px-3.5 py-2 rounded-xl border border-[#D4CEC2] bg-[#FAF8F4] text-sm sm:text-base text-[#484744]"
+                          className="flex-1 min-h-[44px] px-3.5 py-2 rounded-xl border border-[#D4CFC5] bg-[#FAF7EF] text-sm sm:text-base text-[#242424]"
                         />
 
                         {beat.lines.length > 1 && (
@@ -505,7 +530,7 @@ export function StoryboardScreen({
                               }))
                             }
                             aria-label="Delete dialogue line"
-                            className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-[#7A7770] hover:text-[#B55442] hover:bg-[#F9EAE6] cursor-pointer"
+                            className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-xl text-[#6B6862] hover:text-[#2449D8] hover:bg-[#EEF2FF] cursor-pointer"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -515,8 +540,8 @@ export function StoryboardScreen({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="block text-sm font-semibold text-[#484744]">
-                      Korean Meaning (한국어 해석)
+                    <label className="block text-sm font-semibold text-[#242424]">
+                      Korean Translation (한국어 번역)
                     </label>
                     <textarea
                       rows={2}
@@ -527,7 +552,7 @@ export function StoryboardScreen({
                           koreanMeaning: e.target.value,
                         }))
                       }
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#D4CEC2] bg-[#FAF8F4] text-sm sm:text-base text-[#484744]"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#D4CFC5] bg-[#FAF7EF] text-sm sm:text-base text-[#242424]"
                     />
                   </div>
                 </div>
@@ -536,29 +561,29 @@ export function StoryboardScreen({
                   <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
                     <div className="lg:col-span-7 space-y-4">
                       <div>
-                        <p className="text-xs font-semibold text-[#75726B] mb-1">
+                        <p className="text-xs font-semibold text-[#6B6862] mb-1">
                           Scene Description
                         </p>
-                        <p className="text-sm sm:text-base text-[#484744] leading-relaxed">
+                        <p className="text-sm sm:text-base text-[#242424] leading-relaxed">
                           {beat.sceneDescription}
                         </p>
                       </div>
 
                       <div className="space-y-2">
-                        <p className="text-xs font-semibold text-[#75726B]">
+                        <p className="text-xs font-semibold text-[#6B6862]">
                           English Dialogue (tap highlighted expressions)
                         </p>
-                        <div className="space-y-2 bg-[#F8F5EE] border border-[#E6E0D5] rounded-xl p-4">
+                        <div className="space-y-2 bg-[#FAF7EF] border border-[#E5E0D6] rounded-xl p-4">
                           {beat.lines.map((line) => (
                             <p
                               key={line.id}
-                              className="text-sm sm:text-base text-[#484744] leading-relaxed"
+                              className="text-sm sm:text-base text-[#242424] leading-relaxed"
                             >
                               <span
                                 className={`font-bold mr-2 ${
-                                  line.speaker === "Square"
-                                    ? "text-[#B56E42]"
-                                    : "text-[#5E7859]"
+                                  line.speaker === "Eraser"
+                                    ? "text-[#2449D8]"
+                                    : "text-[#8A6500]"
                                 }`}
                               >
                                 {line.speaker}:
@@ -570,10 +595,10 @@ export function StoryboardScreen({
                       </div>
 
                       <div>
-                        <p className="text-xs font-semibold text-[#75726B] mb-1">
-                          Korean Meaning
+                        <p className="text-xs font-semibold text-[#6B6862] mb-1">
+                          Korean Translation
                         </p>
-                        <p className="text-sm text-[#66645F] whitespace-pre-line leading-relaxed">
+                        <p className="text-sm text-[#524F4A] whitespace-pre-line leading-relaxed">
                           {beat.koreanMeaning}
                         </p>
                       </div>
@@ -581,14 +606,14 @@ export function StoryboardScreen({
 
                     <div className="lg:col-span-5 space-y-4">
                       <div>
-                        <p className="text-xs font-semibold text-[#75726B] mb-1.5">
+                        <p className="text-xs font-semibold text-[#6B6862] mb-1.5">
                           English Subtitles (max 2 lines per cue)
                         </p>
-                        <div className="bg-[#484744] rounded-xl p-4 space-y-2.5">
+                        <div className="bg-[#242424] rounded-xl p-4 space-y-2.5">
                           {subtitlePreviewLines.map((sub) => (
                             <div
                               key={sub.id}
-                              className="text-center border-b border-white/10 last:border-b-0 pb-2 last:pb-0"
+                              className="text-center border-b border-white/15 last:border-b-0 pb-2 last:pb-0"
                             >
                               {sub.lines.map((l, i) => (
                                 <p
@@ -604,7 +629,7 @@ export function StoryboardScreen({
                       </div>
 
                       <div>
-                        <p className="text-xs font-semibold text-[#75726B] mb-1.5">
+                        <p className="text-xs font-semibold text-[#6B6862] mb-1.5">
                           Learning Expressions in Beat {beat.number}
                         </p>
                         <div className="flex flex-wrap gap-2">
@@ -628,7 +653,7 @@ export function StoryboardScreen({
                                     }
                                   )
                                 }
-                                className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[#F7ECE3] border border-[#E5C2A8] text-[#8F4D22] text-sm font-semibold hover:bg-[#F2DFD0] transition-colors cursor-pointer"
+                                className="min-h-[40px] px-3.5 py-1.5 rounded-xl bg-[#FFFBEB] border border-[#F5C518] text-[#242424] text-sm font-semibold hover:bg-[#FFF3BF] transition-colors cursor-pointer"
                               >
                                 {exprText}
                               </button>
@@ -639,35 +664,45 @@ export function StoryboardScreen({
                     </div>
                   </div>
 
-                  {/* Camera, Lighting & Background Music Direction Row */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-4 border-t border-[#EAE4D8] text-xs sm:text-sm">
-                    <div className="bg-[#FAF8F4] border border-[#E6E0D5] rounded-xl p-3.5 space-y-1">
-                      <p className="font-semibold text-[#484744] inline-flex items-center gap-1.5">
-                        <Camera className="w-3.5 h-3.5 text-[#75726B]" />
+                  {/* Camera, Lighting, Background Music & Sound Effects Direction Row */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 pt-4 border-t border-[#ECE7DD] text-xs sm:text-sm">
+                    <div className="bg-[#FAF7EF] border border-[#E5E0D6] rounded-xl p-3.5 space-y-1">
+                      <p className="font-semibold text-[#242424] inline-flex items-center gap-1.5">
+                        <Camera className="w-3.5 h-3.5 text-[#524F4A]" />
                         <span>Camera Direction</span>
                       </p>
-                      <p className="text-[#66645F] leading-relaxed">
+                      <p className="text-[#524F4A] leading-relaxed">
                         {beat.cameraDirection}
                       </p>
                     </div>
 
-                    <div className="bg-[#FAF8F4] border border-[#E6E0D5] rounded-xl p-3.5 space-y-1">
-                      <p className="font-semibold text-[#484744] inline-flex items-center gap-1.5">
-                        <Sun className="w-3.5 h-3.5 text-[#C27849]" />
+                    <div className="bg-[#FAF7EF] border border-[#E5E0D6] rounded-xl p-3.5 space-y-1">
+                      <p className="font-semibold text-[#242424] inline-flex items-center gap-1.5">
+                        <Sun className="w-3.5 h-3.5 text-[#B68600]" />
                         <span>Lighting Direction</span>
                       </p>
-                      <p className="text-[#66645F] leading-relaxed">
+                      <p className="text-[#524F4A] leading-relaxed">
                         {beat.lightingDirection}
                       </p>
                     </div>
 
-                    <div className="bg-[#FAF8F4] border border-[#E6E0D5] rounded-xl p-3.5 space-y-1">
-                      <p className="font-semibold text-[#484744] inline-flex items-center gap-1.5">
-                        <Music className="w-3.5 h-3.5 text-[#6F876B]" />
+                    <div className="bg-[#FAF7EF] border border-[#E5E0D6] rounded-xl p-3.5 space-y-1">
+                      <p className="font-semibold text-[#242424] inline-flex items-center gap-1.5">
+                        <Music className="w-3.5 h-3.5 text-[#2449D8]" />
                         <span>Background Music</span>
                       </p>
-                      <p className="text-[#66645F] leading-relaxed">
+                      <p className="text-[#524F4A] leading-relaxed">
                         {beat.musicDirection}
+                      </p>
+                    </div>
+
+                    <div className="bg-[#FAF7EF] border border-[#E5E0D6] rounded-xl p-3.5 space-y-1">
+                      <p className="font-semibold text-[#242424] inline-flex items-center gap-1.5">
+                        <Volume2 className="w-3.5 h-3.5 text-[#242424]" />
+                        <span>Sound Effects</span>
+                      </p>
+                      <p className="text-[#524F4A] leading-relaxed">
+                        {beat.soundEffects}
                       </p>
                     </div>
                   </div>
@@ -682,7 +717,7 @@ export function StoryboardScreen({
         <button
           type="button"
           onClick={onContinue}
-          className="w-full sm:w-auto min-h-[50px] px-7 py-3 rounded-xl bg-[#D99A70] text-white text-base font-semibold hover:bg-[#C6865B] active:scale-[0.98] transition-all inline-flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+          className="w-full sm:w-auto min-h-[50px] px-7 py-3 rounded-xl bg-[#2449D8] text-white text-base font-semibold hover:bg-[#1D3CB8] active:scale-[0.98] transition-all inline-flex items-center justify-center gap-2 cursor-pointer shadow-xs"
         >
           <span>Continue to 3D Film & Soundtrack</span>
           <ArrowRight className="w-5 h-5" />

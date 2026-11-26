@@ -13,6 +13,7 @@ import type {
   ExpressionItem,
   GeneratedVideoPackage,
   SceneSettings,
+  SpeakerRole,
 } from "../types";
 import {
   buildVideoPackage,
@@ -107,17 +108,19 @@ export function FinalScreen({
           currentCameraDirection: beat.cameraDirection,
           currentLightingDirection: beat.lightingDirection,
           currentMusicDirection: beat.musicDirection,
+          currentSoundEffects: beat.soundEffects,
         }),
       });
 
       const data = (await res.json()) as {
         error?: string;
         sceneDescription?: string;
-        lines?: Array<{ speaker: "Square" | "Circle"; text: string }>;
+        lines?: Array<{ speaker: SpeakerRole; text: string }>;
         koreanMeaning?: string;
         cameraDirection?: string;
         lightingDirection?: string;
         musicDirection?: string;
+        soundEffects?: string;
       };
 
       if (!res.ok || !data.lines || data.lines.length === 0) {
@@ -130,10 +133,11 @@ export function FinalScreen({
         cameraDirection: data.cameraDirection || beat.cameraDirection,
         lightingDirection: data.lightingDirection || beat.lightingDirection,
         musicDirection: data.musicDirection || beat.musicDirection,
+        soundEffects: data.soundEffects || beat.soundEffects,
         koreanMeaning: data.koreanMeaning || beat.koreanMeaning,
         lines: data.lines.map((l, i) => ({
           id: `${beat.id}-final-regen-${Date.now()}-${i}`,
-          speaker: l.speaker,
+          speaker: l.speaker === "Eraser" ? "Eraser" : "Pencil",
           text: l.text,
         })),
       };
@@ -163,7 +167,7 @@ export function FinalScreen({
     setExportError(null);
     setDownloadSuccess(false);
     setExportPct(2);
-    setExportStage("Preparing 3D frames & audio mix...");
+    setExportStage("Preparing 3D frames & two-track audio mix...");
 
     try {
       const blob = await exportCompletedMp4(
@@ -178,7 +182,7 @@ export function FinalScreen({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "shape-of-me.mp4";
+      a.download = "the-little-dot.mp4";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -199,14 +203,18 @@ export function FinalScreen({
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: item.expression, speaker: "Square" }),
+        body: JSON.stringify({
+          text: item.expression,
+          speaker: "Pencil",
+          beatNumber: 4,
+        }),
       });
       if (res.ok) {
         const data = (await res.json()) as { audioBase64?: string };
         if (data.audioBase64) {
           const audio = new Audio(`data:audio/wav;base64,${data.audioBase64}`);
-          await audio.play();
           audio.onended = () => setSpeakingExprId(null);
+          await audio.play();
           return;
         }
       }
@@ -230,15 +238,16 @@ export function FinalScreen({
     <section className="space-y-8">
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div className="space-y-1.5">
-          <p className="text-sm font-medium text-[#75726B]">
+          <p className="text-sm font-medium text-[#6B6760]">
             Step 5 of 5 · Screening, Export & Study Review
           </p>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#484744] text-balance">
-            {scene.title || "Shape of Me"}
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#242424] text-balance">
+            {scene.title || "The Little Dot"}
           </h1>
-          <p className="text-sm sm:text-base text-[#66645F]">
+          <p className="text-sm sm:text-base text-[#524F4A]">
             Play your completed 30-second 3D short film, balance voice and
-            music levels, regenerate individual scenes, or download as MP4.
+            two-track music levels, regenerate individual scenes, or download as
+            MP4.
           </p>
         </div>
 
@@ -247,7 +256,7 @@ export function FinalScreen({
             type="button"
             disabled={isExporting}
             onClick={handleDownloadMp4}
-            className="w-full sm:w-auto min-h-[50px] px-6 py-3 rounded-xl bg-[#6F876B] text-white font-semibold text-base hover:bg-[#5E745A] disabled:opacity-65 active:scale-[0.98] transition-all inline-flex items-center justify-center gap-2 shrink-0 cursor-pointer shadow-xs"
+            className="w-full sm:w-auto min-h-[50px] px-6 py-3 rounded-xl bg-[#242424] text-[#FAF7EF] font-semibold text-base hover:bg-[#363532] disabled:opacity-65 active:scale-[0.98] transition-all inline-flex items-center justify-center gap-2 shrink-0 cursor-pointer shadow-xs"
           >
             {isExporting ? (
               <>
@@ -265,29 +274,30 @@ export function FinalScreen({
       </div>
 
       {isExporting && (
-        <div className="bg-white/90 border border-[#D8D2C7] rounded-2xl p-4 space-y-2">
-          <div className="h-2.5 w-full rounded-full bg-[#EAE4D8] overflow-hidden">
+        <div className="bg-white/95 border border-[#DCD7CE] rounded-2xl p-4 space-y-2">
+          <div className="h-2.5 w-full rounded-full bg-[#EFEAE0] overflow-hidden">
             <div
-              className="h-full bg-[#6F876B] transition-all duration-200"
+              className="h-full bg-[#2449D8] transition-all duration-200"
               style={{ width: `${exportPct}%` }}
             />
           </div>
-          <p className="text-xs text-[#66645F]">{exportStage}</p>
+          <p className="text-xs text-[#524F4A]">{exportStage}</p>
         </div>
       )}
 
       {downloadSuccess && (
-        <div className="rounded-2xl border border-[#A4B5A0] bg-[#EBF0EA] p-4 flex items-center gap-2.5 text-sm text-[#3F533B]">
-          <CheckCircle2 className="w-5 h-5 text-[#6F876B] shrink-0" />
+        <div className="rounded-2xl border border-[#2449D8]/30 bg-white p-4 flex items-center gap-2.5 text-sm text-[#242424]">
+          <CheckCircle2 className="w-5 h-5 text-[#2449D8] shrink-0" />
           <span>
-            Downloaded <strong>shape-of-me.mp4</strong> including English voice,
-            burned-in subtitles, background music, and sound effects.
+            Downloaded <strong>the-little-dot.mp4</strong> including English
+            voices, burned-in subtitles, both crossfaded music tracks, and
+            foley sound effects.
           </span>
         </div>
       )}
 
       {exportError && (
-        <div className="rounded-2xl border border-[#DC8A7E] bg-[#FDF0EE] p-4 text-sm text-[#7D2B20]">
+        <div className="rounded-2xl border border-[#2449D8] bg-[#EEF2FF] p-4 text-sm text-[#1D3CB8]">
           {exportError}
         </div>
       )}
@@ -303,20 +313,20 @@ export function FinalScreen({
           showAudioSliders
         />
       ) : (
-        <div className="bg-white/90 border border-[#D8D2C7] rounded-2xl p-8 text-center space-y-4">
-          <p className="font-display text-xl font-bold text-[#484744]">
+        <div className="bg-white/95 border border-[#DCD7CE] rounded-2xl p-8 text-center space-y-4">
+          <p className="font-display text-xl font-bold text-[#242424]">
             Your 30-second 3D short film isn’t built yet
           </p>
-          <p className="text-sm text-[#66645F] max-w-md mx-auto">
-            Build the 3D animation, English voices, and continuous instrumental
-            soundtrack now to play and export as MP4.
+          <p className="text-sm text-[#524F4A] max-w-md mx-auto">
+            Build the 3D animation, Pencil & Eraser voices, and two-track
+            instrumental score now to play and export as MP4.
           </p>
           <div className="flex flex-wrap justify-center gap-3 pt-1">
             <button
               type="button"
               disabled={isQuickBuilding}
               onClick={handleQuickBuild}
-              className="min-h-[48px] px-6 py-3 rounded-xl bg-[#D99A70] text-white font-semibold text-sm sm:text-base hover:bg-[#C6865B] inline-flex items-center gap-2 cursor-pointer"
+              className="min-h-[48px] px-6 py-3 rounded-xl bg-[#2449D8] text-white font-semibold text-sm sm:text-base hover:bg-[#1D3CB8] inline-flex items-center gap-2 cursor-pointer"
             >
               {isQuickBuilding ? (
                 <>
@@ -333,7 +343,7 @@ export function FinalScreen({
             <button
               type="button"
               onClick={onGoToVideo}
-              className="min-h-[48px] px-5 py-3 rounded-xl border border-[#D4CEC2] bg-[#FAF8F4] text-sm font-semibold text-[#484744] hover:bg-[#EFEAE0] cursor-pointer"
+              className="min-h-[48px] px-5 py-3 rounded-xl border border-[#DCD7CE] bg-[#FAF7EF] text-sm font-semibold text-[#242424] hover:bg-[#EFEAE0] cursor-pointer"
             >
               Back to Video Studio
             </button>
@@ -343,12 +353,12 @@ export function FinalScreen({
 
       {/* Final Script (with Individual Scene Regeneration) & Expressions Review */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        <div className="lg:col-span-6 bg-white/90 border border-[#D8D2C7] rounded-2xl p-5 sm:p-6 space-y-4">
-          <div className="flex items-center justify-between border-b border-[#EAE4D8] pb-3">
-            <h2 className="font-display text-xl font-bold text-[#484744]">
+        <div className="lg:col-span-6 bg-white/95 border border-[#DCD7CE] rounded-2xl p-5 sm:p-6 space-y-4">
+          <div className="flex items-center justify-between border-b border-[#EFEAE0] pb-3">
+            <h2 className="font-display text-xl font-bold text-[#242424]">
               Final English Script
             </h2>
-            <span className="font-mono-tabular text-xs font-semibold text-[#5C5A55]">
+            <span className="font-mono-tabular text-xs font-semibold text-[#524F4A]">
               {totalWordCount} total words · 30s
             </span>
           </div>
@@ -362,7 +372,7 @@ export function FinalScreen({
                   className="space-y-2 pb-3 border-b border-[#EFEAE0] last:border-b-0 last:pb-0"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-[#75726B] font-mono-tabular">
+                    <p className="text-xs font-semibold text-[#6B6760] font-mono-tabular">
                       Beat {beat.number}: {beat.title} ({beat.startSec}–
                       {beat.endSec}s)
                     </p>
@@ -370,7 +380,7 @@ export function FinalScreen({
                       type="button"
                       disabled={isRegen}
                       onClick={() => handleRegenerateSingleScene(beat)}
-                      className="min-h-[34px] px-2.5 py-1 rounded-lg bg-[#EBF0EA] border border-[#C5D3C1] text-[#3F533B] text-xs font-semibold hover:bg-[#DFEAE0] disabled:opacity-60 inline-flex items-center gap-1 cursor-pointer"
+                      className="min-h-[34px] px-2.5 py-1 rounded-lg bg-[#FAF7EF] border border-[#DCD7CE] text-[#242424] text-xs font-semibold hover:bg-[#EFEAE0] disabled:opacity-60 inline-flex items-center gap-1 cursor-pointer"
                     >
                       {isRegen ? (
                         <Loader2 className="w-3 h-3 animate-spin" />
@@ -385,13 +395,13 @@ export function FinalScreen({
                     {beat.lines.map((line) => (
                       <p
                         key={line.id}
-                        className="text-sm sm:text-base text-[#484744] leading-relaxed"
+                        className="text-sm sm:text-base text-[#242424] leading-relaxed"
                       >
                         <span
                           className={`font-bold mr-2 ${
-                            line.speaker === "Square"
-                              ? "text-[#B56E42]"
-                              : "text-[#5E7859]"
+                            line.speaker === "Eraser"
+                              ? "text-[#2449D8]"
+                              : "text-[#8A6500]"
                           }`}
                         >
                           {line.speaker}:
@@ -406,17 +416,17 @@ export function FinalScreen({
           </div>
         </div>
 
-        <div className="lg:col-span-6 bg-white/90 border border-[#D8D2C7] rounded-2xl p-5 sm:p-6 space-y-4">
-          <div className="flex items-center justify-between border-b border-[#EAE4D8] pb-3">
-            <h2 className="font-display text-xl font-bold text-[#484744]">
+        <div className="lg:col-span-6 bg-white/95 border border-[#DCD7CE] rounded-2xl p-5 sm:p-6 space-y-4">
+          <div className="flex items-center justify-between border-b border-[#EFEAE0] pb-3">
+            <h2 className="font-display text-xl font-bold text-[#242424]">
               Expressions Review
             </h2>
-            <span className="font-mono-tabular text-xs text-[#75726B]">
+            <span className="font-mono-tabular text-xs text-[#6B6760]">
               {expressions.filter((e) => e.expression.trim()).length} phrases
             </span>
           </div>
 
-          <div className="divide-y divide-[#EAE4D8]">
+          <div className="divide-y divide-[#EFEAE0]">
             {expressions
               .filter((e) => e.expression.trim().length > 0)
               .map((item) => {
@@ -427,13 +437,13 @@ export function FinalScreen({
                     className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3"
                   >
                     <div className="space-y-0.5 min-w-0">
-                      <p className="text-base font-bold text-[#484744]">
+                      <p className="text-base font-bold text-[#242424]">
                         {item.expression}
                       </p>
-                      <div className="flex flex-wrap items-center gap-2 text-sm text-[#66645F]">
+                      <div className="flex flex-wrap items-center gap-2 text-sm text-[#524F4A]">
                         <span>{item.koreanMeaning}</span>
                         <span aria-hidden="true">·</span>
-                        <span className="text-[#75726B]">{item.movie}</span>
+                        <span className="text-[#6B6760]">{item.movie}</span>
                       </div>
                     </div>
 
@@ -443,8 +453,8 @@ export function FinalScreen({
                       aria-label={`Listen to ${item.expression}`}
                       className={`min-h-[44px] min-w-[44px] px-3 rounded-xl border inline-flex items-center justify-center shrink-0 transition-colors cursor-pointer ${
                         isSpeaking
-                          ? "bg-[#F7ECE3] border-[#D99A70] text-[#B56E42]"
-                          : "bg-[#FAF8F4] border-[#D8D2C7] text-[#5C5A55] hover:bg-[#EFEAE0]"
+                          ? "bg-[#FFFBEB] border-[#F5C518] text-[#242424]"
+                          : "bg-[#FAF7EF] border-[#DCD7CE] text-[#242424] hover:bg-[#EFEAE0]"
                       }`}
                     >
                       <Volume2 className="w-4 h-4" />
@@ -456,7 +466,7 @@ export function FinalScreen({
         </div>
       </div>
 
-      <footer className="pt-2 pb-6 text-center text-sm font-medium text-[#75726B]">
+      <footer className="pt-2 pb-6 text-center text-sm font-medium text-[#6B6760]">
         {FILM_CREDIT_TEXT}
       </footer>
     </section>

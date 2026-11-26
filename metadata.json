@@ -1,6 +1,6 @@
 {
-  "name": "Shape of Me",
-  "description": "Turn English expressions learned from movies into a 30-second animated short film with English voice and subtitles.",
+  "name": "The Little Dot",
+  "description": "Turn English expressions learned from movies into a 30-second 3D animated short film starring a yellow pencil and cobalt-blue eraser, with English voices, synchronized subtitles, and two original background music tracks.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

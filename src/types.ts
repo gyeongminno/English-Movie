@@ -1,7 +1,7 @@
 export type ScreenId = "input" | "scene" | "storyboard" | "video" | "final";
 
 export type AnimationStyle =
-  | "Artistic 3D animation"
+  | "Artistic cinematic 3D animation"
   | "Minimalist 3D motion graphics"
   | "2D animation"
   | "Clay"
@@ -18,14 +18,14 @@ export interface ExpressionItem {
 export interface SceneSettings {
   title: string;
   place: string;
-  squareCharacter: string;
-  circlesCharacter: string;
+  pencilCharacter: string;
+  eraserCharacter: string;
   situation: string;
   theme: string;
   style: AnimationStyle;
 }
 
-export type SpeakerRole = "Square" | "Circle";
+export type SpeakerRole = "Pencil" | "Eraser";
 
 export interface DialogueLine {
   id: string;
@@ -44,6 +44,7 @@ export interface Beat {
   cameraDirection: string;
   lightingDirection: string;
   musicDirection: string;
+  soundEffects: string;
   lines: DialogueLine[];
   koreanMeaning: string;
   learningExpressions: string[];
@@ -67,6 +68,8 @@ export interface GeneratedVideoPackage {
   mode: "3d-animation" | "3d-slideshow";
   timedLines: TimedLine[];
   musicBuffer: AudioBuffer;
+  track1Buffer: AudioBuffer;
+  track2Buffer: AudioBuffer;
   musicSeed: number;
   musicSourceLabel: string;
   totalDurationSec: 30;

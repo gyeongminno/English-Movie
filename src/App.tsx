@@ -9,6 +9,7 @@ import {
   DEFAULT_BEATS,
   DEFAULT_EXPRESSIONS,
   DEFAULT_SCENE_SETTINGS,
+  countTotalScriptWords,
 } from "./data/defaults";
 import type {
   Beat,
@@ -17,6 +18,109 @@ import type {
   SceneSettings,
   ScreenId,
 } from "./types";
+
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function syncBeatsWithExpressions(
+  prevExprs: ExpressionItem[],
+  nextExprs: ExpressionItem[],
+  currentBeats: Beat[]
+): Beat[] {
+  const prevById = new Map(prevExprs.map((e) => [e.id, e]));
+  const nextById = new Map(nextExprs.map((e) => [e.id, e]));
+
+  let updatedBeats = currentBeats.map((b) => ({
+    ...b,
+    lines: b.lines.map((l) => ({ ...l })),
+    learningExpressions: [...b.learningExpressions],
+  }));
+
+  // 1. Handle modified expressions (replace inline in dialogue & learningExpressions)
+  for (const nextItem of nextExprs) {
+    const prevItem = prevById.get(nextItem.id);
+    if (!prevItem) continue;
+
+    const oldPhrase = prevItem.expression.trim();
+    const newPhrase = nextItem.expression.trim();
+    if (!oldPhrase || oldPhrase === newPhrase) continue;
+
+    if (newPhrase.length > 0) {
+      const candidateBeats = updatedBeats.map((b) => {
+        const regex = new RegExp(`\\b${escapeRegExp(oldPhrase)}\\b`, "gi");
+        const fallbackRegex = new RegExp(escapeRegExp(oldPhrase), "gi");
+        return {
+          ...b,
+          learningExpressions: b.learningExpressions.map((le) =>
+            le.trim().toLowerCase() === oldPhrase.toLowerCase() ? newPhrase : le
+          ),
+          lines: b.lines.map((l) => ({
+            ...l,
+            text: regex.test(l.text)
+              ? l.text.replace(regex, newPhrase)
+              : l.text.replace(fallbackRegex, newPhrase),
+          })),
+        };
+      });
+
+      const candidateCount = countTotalScriptWords(candidateBeats);
+      if (candidateCount >= 55 && candidateCount <= 75) {
+        updatedBeats = candidateBeats;
+      } else {
+        // Always update expression tags even if an unusually long phrase exceeds bounds
+        updatedBeats = updatedBeats.map((b) => ({
+          ...b,
+          learningExpressions: b.learningExpressions.map((le) =>
+            le.trim().toLowerCase() === oldPhrase.toLowerCase() ? newPhrase : le
+          ),
+        }));
+      }
+    }
+  }
+
+  // 2. Handle deleted expressions (detach from learningExpressions)
+  for (const prevItem of prevExprs) {
+    if (nextById.has(prevItem.id)) continue;
+    const removedPhrase = prevItem.expression.trim().toLowerCase();
+    if (!removedPhrase) continue;
+    updatedBeats = updatedBeats.map((b) => ({
+      ...b,
+      learningExpressions: b.learningExpressions.filter(
+        (le) => le.trim().toLowerCase() !== removedPhrase
+      ),
+    }));
+  }
+
+  // 3. Attach newly added/filled expressions to the beat with fewest tags
+  const assignedLower = new Set(
+    updatedBeats.flatMap((b) =>
+      b.learningExpressions.map((le) => le.trim().toLowerCase())
+    )
+  );
+
+  for (const nextItem of nextExprs) {
+    const phrase = nextItem.expression.trim();
+    if (!phrase || assignedLower.has(phrase.toLowerCase())) continue;
+
+    let targetIdx = 0;
+    let minCount = Infinity;
+    updatedBeats.forEach((b, idx) => {
+      if (b.learningExpressions.length < minCount) {
+        minCount = b.learningExpressions.length;
+        targetIdx = idx;
+      }
+    });
+
+    updatedBeats[targetIdx] = {
+      ...updatedBeats[targetIdx],
+      learningExpressions: [...updatedBeats[targetIdx].learningExpressions, phrase],
+    };
+    assignedLower.add(phrase.toLowerCase());
+  }
+
+  return updatedBeats;
+}
 
 export default function App() {
   const [activeScreen, setActiveScreen] = useState<ScreenId>("input");
@@ -37,11 +141,38 @@ export default function App() {
     useState<GeneratedVideoPackage | null>(null);
 
   const [voiceVolume, setVoiceVolume] = useState<number>(1.0);
-  const [musicVolume, setMusicVolume] = useState<number>(0.42);
+  const [musicVolume, setMusicVolume] = useState<number>(0.45);
 
   const handleSelectScreen = (screen: ScreenId) => {
     setActiveScreen(screen);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleChangeExpressions = (nextExpressions: ExpressionItem[]) => {
+    const syncedBeats = syncBeatsWithExpressions(
+      expressions,
+      nextExpressions,
+      beats
+    );
+    setExpressions(nextExpressions);
+    setBeats(syncedBeats);
+    setVideoPackage(null);
+  };
+
+  const handleResetExpressions = () => {
+    const resetExprs = DEFAULT_EXPRESSIONS.map((e) => ({ ...e }));
+    const syncedBeats = syncBeatsWithExpressions(
+      expressions,
+      resetExprs,
+      DEFAULT_BEATS.map((b) => ({
+        ...b,
+        lines: b.lines.map((l) => ({ ...l })),
+        learningExpressions: [...b.learningExpressions],
+      }))
+    );
+    setExpressions(resetExprs);
+    setBeats(syncedBeats);
+    setVideoPackage(null);
   };
 
   const handleChangeBeats = (nextBeats: Beat[]) => {
@@ -57,7 +188,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F2EEE6] text-[#484744] flex flex-col">
+    <div className="min-h-screen bg-[#FAF7EF] text-[#242424] flex flex-col">
       <TopNav
         activeScreen={activeScreen}
         onSelectScreen={handleSelectScreen}
@@ -68,10 +199,8 @@ export default function App() {
         {activeScreen === "input" && (
           <ExpressionsScreen
             expressions={expressions}
-            onChange={setExpressions}
-            onResetDefaults={() =>
-              setExpressions(DEFAULT_EXPRESSIONS.map((e) => ({ ...e })))
-            }
+            onChange={handleChangeExpressions}
+            onResetDefaults={handleResetExpressions}
             onContinue={() => handleSelectScreen("scene")}
           />
         )}

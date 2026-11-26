@@ -1,48 +1,47 @@
 import type { Beat, DialogueLine, ExpressionItem, SceneSettings } from "../types";
 
 export const PALETTE = {
-  warmIvory: "#F2EEE6",
-  apricotOrange: "#D99A70",
-  sageGreen: "#A4B5A0",
-  warmGray: "#C5C0B8",
-  softCharcoal: "#484744",
+  pencilYellow: "#F5C518",
+  eraserBlue: "#2449D8",
+  darkGraphite: "#242424",
+  warmIvory: "#FAF7EF",
 } as const;
 
 export const DEFAULT_EXPRESSIONS: ExpressionItem[] = [
   {
     id: "exp-1",
-    expression: "The thing is",
-    koreanMeaning: "실은 말이야",
+    expression: "Oops",
+    koreanMeaning: "앗, 이런!",
     movie: "Notting Hill",
   },
   {
     id: "exp-2",
-    expression: "I wish I were",
-    koreanMeaning: "내가 ~라면 좋을 텐데",
-    movie: "Minari",
-  },
-  {
-    id: "exp-3",
-    expression: "What if",
-    koreanMeaning: "~하면 어떡하지?",
-    movie: "Inside Out 2",
-  },
-  {
-    id: "exp-4",
-    expression: "freaking out",
-    koreanMeaning: "당황하다, 패닉에 빠지다",
-    movie: "Inside Out 2",
-  },
-  {
-    id: "exp-5",
-    expression: "Let me help",
-    koreanMeaning: "내가 도와줄게",
+    expression: "belong here",
+    koreanMeaning: "여기에 속하다",
     movie: "Notting Hill",
   },
   {
+    id: "exp-3",
+    expression: "spick and span",
+    koreanMeaning: "아주 깨끗한, 말끔한",
+    movie: "To be confirmed",
+  },
+  {
+    id: "exp-4",
+    expression: "Hear me out",
+    koreanMeaning: "내 이야기를 끝까지 들어봐",
+    movie: "Minari",
+  },
+  {
+    id: "exp-5",
+    expression: "What if",
+    koreanMeaning: "~라면 어떨까?",
+    movie: "Inside Out 2",
+  },
+  {
     id: "exp-6",
-    expression: "Nice one",
-    koreanMeaning: "잘했어",
+    expression: "Let me show you",
+    koreanMeaning: "내가 보여줄게",
     movie: "Notting Hill",
   },
   {
@@ -51,20 +50,39 @@ export const DEFAULT_EXPRESSIONS: ExpressionItem[] = [
     koreanMeaning: "생각이 바뀌었어",
     movie: "Notting Hill",
   },
+  {
+    id: "exp-8",
+    expression: "I'm so sorry",
+    koreanMeaning: "정말 미안해",
+    movie: "Inside Out 2",
+  },
+  {
+    id: "exp-9",
+    expression: "forgive",
+    koreanMeaning: "용서하다",
+    movie: "Inside Out 2",
+  },
+  {
+    id: "exp-10",
+    expression: "No worries",
+    koreanMeaning: "괜찮아, 걱정하지 마",
+    movie: "Inside Out 2",
+  },
 ];
 
 export const DEFAULT_SCENE_SETTINGS: SceneSettings = {
-  title: "Shape of Me",
+  title: "The Little Dot",
   place:
-    "A minimalist, imaginary three-dimensional world with geometric objects, a sculptural pathway, and a small gap in the road.",
-  squareCharacter:
-    "A small pastel-orange 3D cube with subtly rounded edges, a matte ceramic-like surface, and minimal facial features. The square feels lonely and wants to fit in with the circles.",
-  circlesCharacter:
-    "Three sage-green 3D spheres with smooth matte surfaces and minimal facial features. They move by rolling naturally.",
+    "A minimalist three-dimensional world inspired by a large, clean sheet of warm ivory drawing paper with a subtle natural fiber texture. The surrounding environment is bright, simple, and spacious.",
+  pencilCharacter:
+    "A vivid yellow (#F5C518) hexagonal wooden pencil with a realistically sharpened wooden tip, dark graphite lead, a smooth slightly glossy painted wood surface, and only two small expressive eyes (no arms, legs, eyebrows, or mouth). Moves by tilting, rotating, pivoting, and gliding to place graphite dots and connect them into a flower.",
+  eraserCharacter:
+    "A saturated cobalt-blue (#2449D8) rectangular rubber eraser with softly rounded edges, a realistic matte rubber texture, and only two small expressive eyes (no arms, legs, eyebrows, or mouth). Initially strict about keeping the paper clean, then gradually warm, understanding, and friendly.",
   situation:
-    "The square wants to become round because everyone around it is a circle. It tries to roll like the circles but keeps failing. When the circles cannot cross a gap in the road, the square uses its unique shape to help them. Finally, the square realizes that being different is not a bad thing.",
-  theme: "Self-acceptance, friendship, individuality, and the value of being different.",
-  style: "Artistic 3D animation",
+    "The yellow pencil places a small graphite dot on clean ivory paper. The cobalt-blue eraser thinks it is a mistake and tries to remove it, but the pencil adds scattered dots across the paper and gradually connects them with graphite lines. As the camera pulls back, the connected dots reveal an elegant flower. The eraser apologizes, and together they complete the artwork.",
+  theme:
+    "Every beautiful creation can begin with a little dot, and something considered a mistake can become something meaningful.",
+  style: "Artistic cinematic 3D animation",
 };
 
 export const DEFAULT_BEATS: Beat[] = [
@@ -76,23 +94,25 @@ export const DEFAULT_BEATS: Beat[] = [
     endSec: 7,
     durationSec: 7,
     sceneDescription:
-      "Three sage-green spheres roll gracefully across a minimalist ivory landscape. A small orange cube stands alone, slightly separated from the group. The contrast between the moving spheres and the stationary cube visually expresses loneliness and difference.",
+      "Begin with a perfectly clean sheet of warm ivory paper. A vivid yellow pencil enters the frame, gently tilts forward, and places a single small graphite dot on the paper. A cobalt-blue eraser slides into the scene and notices the unexpected dot. The eraser narrows its eyes and moves toward the dot with a slightly annoyed expression. The pencil looks at the eraser with curiosity.",
     cameraDirection:
-      "Begin with a wide, carefully composed shot. Slowly move the camera toward the orange cube while maintaining generous negative space around it.",
+      "Begin with a cinematic macro shot of the sharpened graphite tip touching the paper. Emphasize the realistic paper texture and the appearance of the first graphite dot. Gradually widen the frame to reveal the yellow pencil and cobalt-blue eraser, highlighting their strong color contrast.",
     lightingDirection:
-      "Soft, diffused natural light with gentle shadows and a slightly muted atmosphere.",
+      "Soft directional studio lighting across warm ivory paper with crisp natural shadows and subtle wood lacquer reflections.",
     musicDirection:
-      "Use a quiet, delicate piano melody with sparse notes and a subtle ambient texture. The music should express loneliness, curiosity, and a gentle sense of longing. Keep the music soft and restrained.",
+      "Background Music 1 — Curiosity (90 BPM): Minimalist four-note melody (C4, E4, D4, G4) on soft piano and subtle pizzicato, synced with the pencil's first tap.",
+    soundEffects:
+      "A soft tapping sound when the pencil touches the paper; gentle rubber friction as the eraser enters the scene.",
     lines: [
       {
         id: "b1-l1",
-        speaker: "Square",
-        text: "The thing is, I'm different. I wish I were round. Everyone looks so happy except me.",
+        speaker: "Eraser",
+        text: "Oops! What's this little black dot? You don't belong here. I must keep this paper spick and span.",
       },
     ],
     koreanMeaning:
-      "실은 말이야, 나는 달라. 나도 둥글었으면 좋겠어. 모두들 나 빼고 다 행복해 보여.",
-    learningExpressions: ["The thing is", "I wish I were"],
+      "지우개: 앗! 이 작은 검은 점은 뭐지? 넌 여기에 있으면 안 돼. 나는 이 종이를 아주 깨끗하게 유지해야 해.",
+    learningExpressions: ["Oops", "belong here", "spick and span"],
   },
   {
     id: "beat-2",
@@ -102,23 +122,25 @@ export const DEFAULT_BEATS: Beat[] = [
     endSec: 15,
     durationSec: 8,
     sceneDescription:
-      "The orange cube tries to roll like the green spheres. It tilts, loses its balance, and falls onto its side. It tries again but cannot move as smoothly as the spheres. The movement should feel physically believable but slightly playful.",
+      "The eraser attempts to remove the graphite dot. The pencil quickly moves across the paper and begins creating more individual graphite dots in different positions. The eraser follows, trying to remove the marks. The dots initially appear scattered and meaningless, secretly forming a flower outline without revealing it yet. The pencil expresses nervousness through quick eye movements, blinking, and body tilting.",
     cameraDirection:
-      "Use a medium shot that clearly shows the cube's unsuccessful movements. Introduce a subtle close-up to emphasize its frustration. Avoid excessive camera movement.",
+      "Use smooth tracking shots to follow the pencil and eraser, with close-ups of the pencil tip tapping individual graphite dots. Use low camera angles and cropped compositions to hide the overall flower pattern while building rhythmic movement and tension.",
     lightingDirection:
-      "Make the lighting slightly cooler and the shadows subtly stronger to reflect the character's growing anxiety.",
+      "Crisp studio key light accentuating the glossy yellow hexagonal facets, matte blue rubber, and dark graphite dots.",
     musicDirection:
-      "Gradually introduce soft pizzicato strings, muted percussion, and a slightly irregular rhythm. The music should communicate nervousness, frustration, and mild tension without becoming dramatic or frightening. Add subtle sound effects when the cube tilts and falls.",
+      "Continue Background Music 1 — Curiosity: Repeat C4, E4, D4, G4 with playful rhythmic variations on soft piano and pizzicato, gradually accelerating from 90 to 120 BPM as the eraser chases the pencil's taps.",
+    soundEffects:
+      "Rhythmic graphite tapping sounds synchronized with the music tempo, soft pencil movement sounds, and rubber sliding across the paper.",
     lines: [
       {
         id: "b2-l1",
-        speaker: "Square",
-        text: "Why can't I roll like them? What if they don't like me? I'm freaking out!",
+        speaker: "Pencil",
+        text: "Hear me out! Please don't erase my dots. What if they could become something beautiful? Let me show you.",
       },
     ],
     koreanMeaning:
-      "나는 왜 그들처럼 구를 수 없지? 친구들이 나를 좋아하지 않으면 어떡하지? 나 너무 당황스러워!",
-    learningExpressions: ["What if", "freaking out"],
+      "연필: 내 말 좀 들어봐! 제발 내가 찍은 점들을 지우지 마. 이 점들이 아름다운 무언가가 될 수 있다면? 내가 보여줄게.",
+    learningExpressions: ["Hear me out", "What if", "Let me show you"],
   },
   {
     id: "beat-3",
@@ -128,33 +150,25 @@ export const DEFAULT_BEATS: Beat[] = [
     endSec: 23,
     durationSec: 8,
     sceneDescription:
-      "The green spheres reach a small gap in the sculptural pathway and stop. The orange cube notices that its unique geometric shape fits perfectly into the gap. It moves forward and places itself inside the gap, creating a stable bridge. The green spheres safely roll across the cube. The cube's difference becomes its greatest strength.",
+      "The pencil stops creating new dots and begins connecting the existing graphite dots one by one with thin, organic graphite lines. The eraser stops moving and watches. The camera slowly rises into an overhead view, revealing that the connected dots form a refined, artistic flower with petals, a stem, and leaves. The eraser opens its eyes wider in surprise and admiration.",
     cameraDirection:
-      "Begin with a wide shot showing the gap and the spheres. Use a slightly elevated camera angle to clearly reveal how the cube fills the gap. Emphasize the moment when the cube becomes a bridge through a carefully composed cinematic shot.",
+      "Begin with an extreme close-up of the graphite tip connecting two dots. Follow the continuous movement of the pencil as the flower develops, then slowly rise into an overhead wide shot to reveal the complete flower as the visual climax.",
     lightingDirection:
-      "Gradually introduce warmer light as the cube discovers its ability to help the others.",
+      "Introduce slightly warmer golden studio lighting during the overhead flower reveal while maintaining original vivid character colors.",
     musicDirection:
-      "Gradually resolve the previous musical tension into a hopeful melody. Introduce warm piano chords, gentle marimba notes, and soft strings. Use a subtle musical accent when the cube successfully fills the gap. The music should express discovery, courage, and a sense of achievement.",
+      "Crossfade smoothly at 15s into Background Music 2 — Blooming (75 BPM): Simple ascending melody (C4, E4, G4, C5) on soft piano, gentle xylophone, and subtle bells, peaking with a delicate high note at the flower reveal.",
+    soundEffects:
+      "Soft graphite scratching sounds, subtle paper friction, and a gentle musical accent when the flower is revealed.",
     lines: [
       {
         id: "b3-l1",
-        speaker: "Circle",
-        text: "Oh no! We can't get across!",
-      },
-      {
-        id: "b3-l2",
-        speaker: "Square",
-        text: "Let me help you! You can roll over me.",
-      },
-      {
-        id: "b3-l3",
-        speaker: "Circle",
-        text: "Nice one!",
+        speaker: "Eraser",
+        text: "Wow! Is that a flower? I've changed my mind. You made something beautiful from a mistake.",
       },
     ],
     koreanMeaning:
-      "동그라미: 큰일이야! 우리 건너갈 수 없어!\n네모: 내가 도와줄게! 내 위로 굴러가면 돼.\n동그라미: 잘했어!",
-    learningExpressions: ["Let me help", "Nice one"],
+      "지우개: 와! 저거 꽃이야? 생각이 바뀌었어. 넌 실수에서 아름다운 것을 만들어 냈구나.",
+    learningExpressions: ["I've changed my mind"],
   },
   {
     id: "beat-4",
@@ -164,28 +178,35 @@ export const DEFAULT_BEATS: Beat[] = [
     endSec: 30,
     durationSec: 7,
     sceneDescription:
-      "After the spheres cross the gap, the orange cube comes out and joins them. The spheres slow down so that they can move together with the cube. The cube no longer tries to change its shape. It moves forward in its own way, surrounded by its new friends. End with a balanced, visually beautiful composition showing the orange cube and green spheres together.",
+      "The cobalt-blue eraser gently removes unnecessary graphite marks around the flower without damaging the artwork. The yellow pencil adds the final detail to the flower. The eraser looks toward the pencil and gently tilts its body in apology; the pencil responds with relaxed eye movements. Finally, both remain beside the completed flower in a minimalist art-print composition.",
     cameraDirection:
-      "Slowly pull the camera back to reveal the characters moving together through the minimalist landscape. End with a calm, cinematic wide shot.",
+      "Slowly pull the camera back to reveal the completed artwork in a balanced composition featuring the yellow pencil, cobalt-blue eraser, and graphite flower with generous negative space.",
     lightingDirection:
-      "Use warm, golden, diffused light with soft shadows to create a comforting and hopeful atmosphere.",
+      "Warm studio lighting, realistic soft shadows, and calm ambient highlights across the finished drawing paper.",
     musicDirection:
-      "Return to the original piano melody, but transform it into a warmer and more hopeful arrangement. Add gentle strings and soft ambient harmonies. End with a peaceful, emotionally satisfying musical resolution. Avoid an abrupt ending.",
+      "Continue Background Music 2 — Blooming: Soft piano, gentle xylophone, and subtle bells slow down gracefully during the apology and end on a gentle, sustained final note.",
+    soundEffects:
+      "Gentle erasing sounds, soft graphite drawing sounds, and subtle paper friction.",
     lines: [
       {
         id: "b4-l1",
-        speaker: "Square",
-        text: "I've changed my mind. I like being a square! Being different isn't a bad thing.",
+        speaker: "Eraser",
+        text: "I'm so sorry. Can you forgive me?",
+      },
+      {
+        id: "b4-l2",
+        speaker: "Pencil",
+        text: "No worries! Let's make something beautiful together.",
       },
     ],
     koreanMeaning:
-      "생각이 바뀌었어. 난 네모인 내가 좋아! 다르다는 건 나쁜 게 아니야.",
-    learningExpressions: ["I've changed my mind"],
+      "지우개: 정말 미안해. 나를 용서해 줄 수 있어?\n연필: 괜찮아! 우리 함께 아름다운 것을 만들자.",
+    learningExpressions: ["I'm so sorry", "forgive", "No worries"],
   },
 ];
 
 export const ANIMATION_STYLES = [
-  "Artistic 3D animation",
+  "Artistic cinematic 3D animation",
   "Minimalist 3D motion graphics",
   "2D animation",
   "Clay",

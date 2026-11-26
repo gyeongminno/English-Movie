@@ -31,15 +31,15 @@ export function TopNav({
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-[#F2EEE6]/95 backdrop-blur-md border-b border-[#D8D2C7]">
+      <header className="sticky top-0 z-30 bg-[#FAF7EF]/95 backdrop-blur-md border-b border-[#DCD7CE]">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-8">
           {/* Zone 1: Single text element wordmark */}
           <button
             type="button"
             onClick={() => onSelectScreen("input")}
-            className="font-display text-lg sm:text-xl font-bold tracking-tight text-[#484744] whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D99A70]"
+            className="font-display text-lg sm:text-xl font-bold tracking-tight text-[#242424] whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2449D8]"
           >
-            Shape of Me
+            The Little Dot
           </button>
 
           {/* Zone 2: 5-step progress navigation */}
@@ -55,12 +55,12 @@ export function TopNav({
                   key={item.id}
                   type="button"
                   onClick={() => onSelectScreen(item.id)}
-                  className={`py-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer border-b-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#D99A70] ${
+                  className={`py-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer border-b-2 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#2449D8] ${
                     isActive
-                      ? "border-[#D99A70] text-[#2F2E2B] font-semibold"
+                      ? "border-[#2449D8] text-[#242424] font-semibold"
                       : isDone
-                      ? "border-[#A4B5A0]/60 text-[#484744] hover:text-[#2F2E2B]"
-                      : "border-transparent text-[#78756E] hover:text-[#484744] hover:border-[#C5C0B8]"
+                      ? "border-[#F5C518] text-[#3A3936] hover:text-[#242424]"
+                      : "border-transparent text-[#6E6B65] hover:text-[#242424] hover:border-[#B8B5AF]"
                   }`}
                 >
                   {idx + 1}. {item.label}
@@ -75,7 +75,7 @@ export function TopNav({
               <button
                 type="button"
                 onClick={() => onSelectScreen(nextItem.id)}
-                className="min-h-[40px] px-4 py-2 rounded-xl bg-[#484744] text-[#F2EEE6] text-xs sm:text-sm font-semibold hover:bg-[#383734] active:scale-[0.98] transition-all inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                className="min-h-[40px] px-4 py-2 rounded-xl bg-[#242424] text-[#FAF7EF] text-xs sm:text-sm font-semibold hover:bg-[#363532] active:scale-[0.98] transition-all inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <span>Next: {nextItem.label}</span>
                 <ArrowRight className="w-4 h-4" />
@@ -84,7 +84,7 @@ export function TopNav({
               <button
                 type="button"
                 onClick={() => onSelectScreen("video")}
-                className="min-h-[40px] px-4 py-2 rounded-xl bg-[#6F876B] text-white text-xs sm:text-sm font-semibold hover:bg-[#5E745A] active:scale-[0.98] transition-all inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                className="min-h-[40px] px-4 py-2 rounded-xl bg-[#2449D8] text-white text-xs sm:text-sm font-semibold hover:bg-[#1D3CB8] active:scale-[0.98] transition-all inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <span>{hasGeneratedVideo ? "Studio Settings" : "Build 3D Film"}</span>
               </button>
@@ -96,7 +96,7 @@ export function TopNav({
       {/* Mobile bottom thumb bar (compact <= 56px) */}
       <nav
         aria-label="Mobile 5-step navigation"
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#F2EEE6]/95 backdrop-blur-md border-t border-[#D8D2C7]"
+        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FAF7EF]/95 backdrop-blur-md border-t border-[#DCD7CE]"
       >
         <div className="grid grid-cols-5 h-14">
           {NAV_ITEMS.map((item) => {
@@ -108,7 +108,7 @@ export function TopNav({
                 type="button"
                 onClick={() => onSelectScreen(item.id)}
                 className={`flex flex-col items-center justify-center min-h-[44px] transition-colors cursor-pointer ${
-                  isActive ? "text-[#B56E42] font-semibold" : "text-[#78756E]"
+                  isActive ? "text-[#2449D8] font-semibold" : "text-[#6E6B65]"
                 }`}
               >
                 <Icon className="w-4 h-4" />

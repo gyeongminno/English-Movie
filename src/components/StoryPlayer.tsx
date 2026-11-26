@@ -83,7 +83,7 @@ export function StoryPlayer({
     if (!ctx) return;
     render2DFallback(ctx, {
       timeSec,
-      style: pkg.style === "Artistic 3D animation" || pkg.style === "Minimalist 3D motion graphics" ? "2D animation" : pkg.style,
+      style: pkg.style,
       mode: pkg.mode === "3d-slideshow" ? "slideshow" : "animation",
       timedLines: pkg.timedLines,
       drawSubtitles: false,
@@ -209,7 +209,7 @@ export function StoryPlayer({
 
       const nowCtx = ctx.currentTime;
 
-      // 1. Schedule continuous 30s instrumental soundtrack with automatic voice ducking
+      // 1. Schedule continuous 30s two-track instrumental soundtrack with automatic voice ducking
       if (videoPackage.musicBuffer && musicGainRef.current) {
         const mSrc = ctx.createBufferSource();
         mSrc.buffer = videoPackage.musicBuffer;
@@ -318,7 +318,7 @@ export function StoryPlayer({
               utter.lang = "en-US";
               utter.rate = 0.92;
               utter.volume = Math.min(1, voiceVolume);
-              utter.pitch = line.speaker === "Square" ? 0.95 : 1.12;
+              utter.pitch = line.speaker === "Pencil" ? 1.12 : 0.94;
               window.speechSynthesis.speak(utter);
             }
           }
@@ -385,7 +385,7 @@ export function StoryPlayer({
   return (
     <div className="space-y-4">
       {/* 16:9 3D Viewport + Separate Subtitle & Minimalist Credit Overlays */}
-      <div className="relative w-full aspect-video rounded-2xl overflow-hidden border border-[#D4CEC2] bg-[#F2EEE6] shadow-sm select-none">
+      <div className="relative w-full aspect-video rounded-2xl overflow-hidden border border-[#DCD7CE] bg-[#FAF7EF] shadow-sm select-none">
         <canvas
           ref={canvasRef}
           width={CANVAS_WIDTH}
@@ -393,19 +393,19 @@ export function StoryPlayer({
           className="w-full h-full block"
         />
 
-        {/* End Credit Overlay (27s–30s, never extends past 30s) */}
+        {/* End Credit Overlay (26.8s–30.0s, never extends past 30s) */}
         {creditOpacity > 0.01 && (
           <div
             style={{ opacity: creditOpacity }}
             className="pointer-events-none absolute inset-x-0 top-[7%] text-center px-4"
           >
-            <p className="font-display text-xs sm:text-base md:text-lg font-medium tracking-wide text-[#484744]">
+            <p className="font-display text-xs sm:text-base md:text-lg font-medium tracking-wide text-[#242424]">
               {FILM_CREDIT_TEXT}
             </p>
           </div>
         )}
 
-        {/* Separate Subtitle Overlay (White bold sans-serif, subtle dark outline, max 2 lines) */}
+        {/* Separate Subtitle Overlay (White bold sans-serif, subtle graphite outline, max 2 lines) */}
         {activeSub && activeSub.lines.length > 0 && (
           <div
             aria-live="polite"
@@ -418,7 +418,7 @@ export function StoryPlayer({
                   className="text-white font-bold text-sm sm:text-xl md:text-2xl leading-snug tracking-tight max-w-3xl"
                   style={{
                     textShadow:
-                      "-1.5px -1.5px 0 rgba(34,34,32,0.9), 1.5px -1.5px 0 rgba(34,34,32,0.9), -1.5px 1.5px 0 rgba(34,34,32,0.9), 1.5px 1.5px 0 rgba(34,34,32,0.9), 0 2px 6px rgba(0,0,0,0.5)",
+                      "-1.5px -1.5px 0 rgba(36,36,36,0.92), 1.5px -1.5px 0 rgba(36,36,36,0.92), -1.5px 1.5px 0 rgba(36,36,36,0.92), 1.5px 1.5px 0 rgba(36,36,36,0.92), 0 2px 6px rgba(0,0,0,0.45)",
                   }}
                 >
                   {line}
@@ -427,7 +427,7 @@ export function StoryPlayer({
             </div>
 
             {showKorean && activeSub.korean && (
-              <p className="px-3 py-0.5 rounded-md bg-[#484744]/80 text-[#F2EEE6] text-xs sm:text-sm font-medium max-w-2xl">
+              <p className="px-3 py-0.5 rounded-md bg-[#242424]/85 text-[#FAF7EF] text-xs sm:text-sm font-medium max-w-2xl">
                 {activeSub.korean}
               </p>
             )}
@@ -436,7 +436,7 @@ export function StoryPlayer({
       </div>
 
       {/* Playback Controls, Beat Timeline, Korean Subtitle Toggle & Audio Mix */}
-      <div className="bg-white/85 border border-[#D8D2C7] rounded-2xl p-4 sm:p-5 space-y-4">
+      <div className="bg-white/90 border border-[#DCD7CE] rounded-2xl p-4 sm:p-5 space-y-4">
         <div className="flex items-center gap-3">
           <input
             type="range"
@@ -446,9 +446,9 @@ export function StoryPlayer({
             step={0.05}
             value={currentTime}
             onChange={(e) => handleSeek(parseFloat(e.target.value))}
-            className="w-full accent-[#D99A70] cursor-pointer h-2"
+            className="w-full accent-[#2449D8] cursor-pointer h-2"
           />
-          <span className="font-mono-tabular text-xs sm:text-sm font-medium text-[#484744] whitespace-nowrap shrink-0">
+          <span className="font-mono-tabular text-xs sm:text-sm font-medium text-[#242424] whitespace-nowrap shrink-0">
             {currentTime.toFixed(1)}s / 30.0s
           </span>
         </div>
@@ -464,8 +464,8 @@ export function StoryPlayer({
                 onClick={() => handleSeek(b.startSec)}
                 className={`min-h-[44px] px-3 py-2 rounded-xl text-left text-xs transition-colors border cursor-pointer ${
                   active
-                    ? "bg-[#F7ECE3] border-[#D99A70] text-[#353431] font-semibold"
-                    : "bg-[#F8F5EE] border-[#E0DAD0] text-[#66645F] hover:bg-[#EFEAE0]"
+                    ? "bg-[#FFFBEB] border-[#F5C518] text-[#242424] font-semibold ring-1 ring-[#F5C518]"
+                    : "bg-[#FAF7EF] border-[#E5E0D6] text-[#524F4A] hover:bg-[#EFEAE0]"
                 }`}
               >
                 <div className="flex items-center justify-between gap-1">
@@ -487,7 +487,7 @@ export function StoryPlayer({
             <button
               type="button"
               onClick={handleTogglePlay}
-              className="min-h-[48px] px-6 py-2.5 rounded-xl bg-[#D99A70] text-white font-semibold text-sm sm:text-base hover:bg-[#C6865B] active:scale-[0.98] transition-all inline-flex items-center gap-2 cursor-pointer shadow-xs"
+              className="min-h-[48px] px-6 py-2.5 rounded-xl bg-[#2449D8] text-white font-semibold text-sm sm:text-base hover:bg-[#1D3CB8] active:scale-[0.98] transition-all inline-flex items-center gap-2 cursor-pointer shadow-xs"
             >
               {isPlaying ? (
                 <>
@@ -505,7 +505,7 @@ export function StoryPlayer({
             <button
               type="button"
               onClick={handleReplay}
-              className="min-h-[48px] px-4 py-2.5 rounded-xl bg-[#EFEAE0] text-[#484744] font-semibold text-sm hover:bg-[#E4DDD0] active:scale-[0.98] transition-all inline-flex items-center gap-2 cursor-pointer"
+              className="min-h-[48px] px-4 py-2.5 rounded-xl bg-[#EFEAE0] text-[#242424] font-semibold text-sm hover:bg-[#E4DDD0] active:scale-[0.98] transition-all inline-flex items-center gap-2 cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
               <span>Replay</span>
@@ -518,8 +518,8 @@ export function StoryPlayer({
               onClick={() => setShowKorean((v) => !v)}
               className={`min-h-[44px] px-3.5 py-2 rounded-xl border text-xs sm:text-sm font-medium inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
                 showKorean
-                  ? "bg-[#EBF0EA] border-[#A4B5A0] text-[#3F533B]"
-                  : "bg-[#F8F5EE] border-[#D8D2C7] text-[#5C5A55] hover:bg-[#EFEAE0]"
+                  ? "bg-[#242424] border-[#242424] text-[#FAF7EF]"
+                  : "bg-[#FAF7EF] border-[#DCD7CE] text-[#524F4A] hover:bg-[#EFEAE0]"
               }`}
             >
               <Languages className="w-4 h-4" />
@@ -529,7 +529,7 @@ export function StoryPlayer({
             <button
               type="button"
               onClick={() => setIsMuted((m) => !m)}
-              className="min-h-[44px] px-3.5 py-2 rounded-xl border border-[#D8D2C7] bg-[#F8F5EE] text-[#484744] text-xs sm:text-sm font-medium hover:bg-[#EFEAE0] inline-flex items-center gap-1.5 cursor-pointer"
+              className="min-h-[44px] px-3.5 py-2 rounded-xl border border-[#DCD7CE] bg-[#FAF7EF] text-[#242424] text-xs sm:text-sm font-medium hover:bg-[#EFEAE0] inline-flex items-center gap-1.5 cursor-pointer"
             >
               {isMuted ? (
                 <>
@@ -548,11 +548,11 @@ export function StoryPlayer({
 
         {/* Independent Voice & Background Music Mix Sliders */}
         {showAudioSliders && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-[#E6E0D5]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-[#EAE4D8]">
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-medium text-[#5C5A55]">
+              <div className="flex items-center justify-between text-xs font-medium text-[#524F4A]">
                 <span className="inline-flex items-center gap-1.5">
-                  <Volume2 className="w-3.5 h-3.5 text-[#C6865B]" />
+                  <Volume2 className="w-3.5 h-3.5 text-[#2449D8]" />
                   <span>English Voice Volume</span>
                 </span>
                 <span className="font-mono-tabular">
@@ -569,14 +569,14 @@ export function StoryPlayer({
                 onChange={(e) =>
                   onChangeVoiceVolume?.(parseFloat(e.target.value))
                 }
-                className="w-full accent-[#D99A70] cursor-pointer h-2"
+                className="w-full accent-[#2449D8] cursor-pointer h-2"
               />
             </div>
 
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between text-xs font-medium text-[#5C5A55]">
+              <div className="flex items-center justify-between text-xs font-medium text-[#524F4A]">
                 <span className="inline-flex items-center gap-1.5">
-                  <Music className="w-3.5 h-3.5 text-[#6F876B]" />
+                  <Music className="w-3.5 h-3.5 text-[#242424]" />
                   <span>Background Music Volume (Auto-Ducks)</span>
                 </span>
                 <span className="font-mono-tabular">
@@ -593,7 +593,7 @@ export function StoryPlayer({
                 onChange={(e) =>
                   onChangeMusicVolume?.(parseFloat(e.target.value))
                 }
-                className="w-full accent-[#A4B5A0] cursor-pointer h-2"
+                className="w-full accent-[#242424] cursor-pointer h-2"
               />
             </div>
           </div>
